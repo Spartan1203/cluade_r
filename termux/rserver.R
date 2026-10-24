@@ -7,12 +7,6 @@ port <- as.integer(if (length(args) >= 1) args[1] else 8790)
 token <- if (length(args) >= 2) args[2] else ""
 if (!nzchar(token)) stop("A token is required")
 
-# Attach the standard packages an interactive R session has (Rscript may skip some)
-for (.p in c("methods", "datasets", "utils", "grDevices", "graphics", "stats")) {
-  suppressPackageStartupMessages(library(.p, character.only = TRUE))
-}
-rm(.p)
-
 options(width = 60, warn = 1,
         repos = c(CRAN = "https://cloud.r-project.org"),
         menu.graphics = FALSE, device.ask.default = FALSE)
@@ -216,14 +210,7 @@ handle <- function(con) {
   }
 }
 
-# The port can stay busy for a few seconds after a restart, so retry
-srv <- NULL
-for (.try in 1:30) {
-  srv <- tryCatch(serverSocket(port), error = function(e) { message("Port busy: ", conditionMessage(e)); NULL })
-  if (!is.null(srv)) break
-  Sys.sleep(1)
-}
-if (is.null(srv)) stop("Couldn't open port ", port)
+srv <- serverSocket(port)
 cat("R Pocket listener on port", port, "\n")
 repeat {
   con <- tryCatch(socketAccept(srv, blocking = TRUE, open = "r+b", timeout = 86400),
