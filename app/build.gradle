@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+def runNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int
+
+android {
+    namespace 'io.github.spartan1203.rpocket'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.spartan1203.rpocket'
+        minSdk 26
+        targetSdk 34
+        versionCode runNumber
+        versionName "0.1.${runNumber}"
+    }
+
+    // A fixed key so each new build installs over the last one
+    signingConfigs {
+        rpocket {
+            storeFile rootProject.file('signing/rpocket.keystore')
+            storePassword 'android'
+            keyAlias 'rpocket'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.rpocket
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.rpocket
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
