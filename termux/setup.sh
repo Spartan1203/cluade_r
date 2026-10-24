@@ -6,11 +6,21 @@ BASE="https://raw.githubusercontent.com/Spartan1203/cluade_r/main/termux"
 DIR="$HOME/.rpocket"
 
 echo "==> Updating packages"
-pkg update -y
+# A full upgrade matters: R from the TUR repo needs current system libraries (such as libicu)
+yes | pkg upgrade -y
 
 echo "==> Installing R (this can take a few minutes)"
 pkg install -y tur-repo
+yes | pkg upgrade -y
 pkg install -y r-base build-essential
+
+if ! R --version > /dev/null 2>&1; then
+  echo ""
+  echo "R is installed but won't start. Its system libraries are out of date."
+  echo "Fix: run 'termux-change-repo', pick a different mirror, then run this setup again."
+  R --version 2>&1 | head -2
+  exit 1
+fi
 
 echo "==> Installing the R Pocket listener"
 mkdir -p "$DIR"
