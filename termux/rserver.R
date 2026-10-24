@@ -216,7 +216,14 @@ handle <- function(con) {
   }
 }
 
-srv <- serverSocket(port)
+# The port can stay busy for a few seconds after a restart, so retry
+srv <- NULL
+for (.try in 1:30) {
+  srv <- tryCatch(serverSocket(port), error = function(e) { message("Port busy: ", conditionMessage(e)); NULL })
+  if (!is.null(srv)) break
+  Sys.sleep(1)
+}
+if (is.null(srv)) stop("Couldn't open port ", port)
 cat("R Pocket listener on port", port, "\n")
 repeat {
   con <- tryCatch(socketAccept(srv, blocking = TRUE, open = "r+b", timeout = 86400),
