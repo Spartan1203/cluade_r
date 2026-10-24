@@ -12,7 +12,7 @@ yes | pkg upgrade -y
 echo "==> Installing R (this can take a few minutes)"
 pkg install -y tur-repo
 yes | pkg upgrade -y
-pkg install -y r-base build-essential
+pkg install -y r-base libicu build-essential
 
 if ! R --version > /dev/null 2>&1; then
   echo ""

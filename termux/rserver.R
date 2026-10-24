@@ -7,6 +7,12 @@ port <- as.integer(if (length(args) >= 1) args[1] else 8790)
 token <- if (length(args) >= 2) args[2] else ""
 if (!nzchar(token)) stop("A token is required")
 
+# Attach the standard packages an interactive R session has (Rscript may skip some)
+for (.p in c("methods", "datasets", "utils", "grDevices", "graphics", "stats")) {
+  suppressPackageStartupMessages(library(.p, character.only = TRUE))
+}
+rm(.p)
+
 options(width = 60, warn = 1,
         repos = c(CRAN = "https://cloud.r-project.org"),
         menu.graphics = FALSE, device.ask.default = FALSE)
