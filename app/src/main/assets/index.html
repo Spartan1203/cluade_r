@@ -65,7 +65,14 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 #tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 .pane { flex: 1 1 45%; min-height: 0; overflow: auto; display: none; }
 .pane.on { display: block; }
-#console { font: 12.5px/1.45 var(--mono); padding: 8px 12px 24px; white-space: pre; }
+#console.on { display: flex; flex-direction: column; overflow: hidden; }
+#consoleOut { flex: 1; min-height: 0; overflow: auto; font: 12.5px/1.45 var(--mono); padding: 8px 12px 12px; white-space: pre; }
+#consoleIn { display: flex; align-items: flex-end; gap: 4px; padding: 4px 6px; border-top: 0.5px solid var(--border); background: var(--bg2); }
+#consoleIn .prompt { font: 14px/var(--lh) var(--mono); color: var(--accent); padding: 8px 0 8px 6px; }
+#cmd { flex: 1; min-width: 0; resize: none; border: 0; background: transparent; color: var(--text); font: 14px/var(--lh) var(--mono);
+  padding: 8px 4px; outline: none; height: calc(var(--lh) + 16px); max-height: calc(var(--lh) * 5 + 16px); overflow-y: auto; white-space: pre; }
+#consoleIn button { min-height: 36px; min-width: 36px; padding: 4px 8px; border: 0; color: var(--muted); }
+#consoleIn #cmdRun { color: var(--accent); font-weight: 600; }
 .in { color: var(--text); margin-top: 6px; }
 .out { color: var(--muted); }
 .msg { color: var(--muted); font-style: italic; }
@@ -148,7 +155,17 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
   <button data-tab="lint" onclick="showTab('lint')">Lint</button>
 </div>
 
-<div id="console" class="pane on"></div>
+<div id="console" class="pane on">
+  <div id="consoleOut"></div>
+  <div id="consoleIn">
+    <span class="prompt">&gt;</span>
+    <textarea id="cmd" rows="1" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
+      enterkeyhint="send" placeholder="Type R code and press Enter" aria-label="Console input"></textarea>
+    <button aria-label="Previous command" onclick="historyStep(-1)">&#8593;</button>
+    <button aria-label="Next command" onclick="historyStep(1)">&#8595;</button>
+    <button id="cmdRun" aria-label="Run" onclick="runCommand()">&#9166;</button>
+  </div>
+</div>
 <div id="plots" class="pane"><div class="hint">Plots you make show up here.</div></div>
 <div id="files" class="pane"></div>
 <div id="lint" class="pane"></div>
@@ -283,7 +300,7 @@ function showSetup(kind, detail) {
       '<button onclick="RBridge.openTermux()">Open Termux</button></div>';
   }
   showTab("console");
-  $("console").prepend(c);
+  $("consoleOut").prepend(c);
 }
 function clearSetup() { const c = $("setupCard"); if (c) c.remove(); }
 function copyText(t) { bridge && bridge.copyText(t); toast("Copied"); }
@@ -501,10 +518,62 @@ function addLine(cls, text) {
   const d = document.createElement("div");
   d.className = cls;
   d.textContent = text;
-  const c = $("console");
+  const c = $("consoleOut");
   c.appendChild(d);
   c.scrollTop = c.scrollHeight;
 }
+
+// ---- Console input ----
+const cmd = $("cmd");
+let cmdHistory = store.get("rp.history", []);
+let histPos = cmdHistory.length;
+let histDraft = "";
+function sizeCmd() {
+  const lines = cmd.value.split("\n").length;
+  cmd.style.height = "calc(" + Math.min(lines, 5) + " * var(--lh) + 16px)";
+}
+function runCommand() {
+  const code = cmd.value;
+  if (!code.trim()) { cmd.focus(); return; }
+  if (state === "busy") { toast("R is still running the last command"); return; }
+  if (state !== "ready") { toast("R isn't connected yet"); connect(false); return; }
+  if (cmdHistory[cmdHistory.length - 1] !== code) {
+    cmdHistory.push(code);
+    if (cmdHistory.length > 100) cmdHistory = cmdHistory.slice(-100);
+    store.set("rp.history", cmdHistory);
+  }
+  histPos = cmdHistory.length;
+  histDraft = "";
+  cmd.value = "";
+  sizeCmd();
+  run(code);
+}
+function historyStep(d) {
+  if (!cmdHistory.length) { toast("No earlier commands yet"); return; }
+  if (histPos === cmdHistory.length) histDraft = cmd.value;
+  histPos = Math.max(0, Math.min(cmdHistory.length, histPos + d));
+  cmd.value = histPos === cmdHistory.length ? histDraft : cmdHistory[histPos];
+  sizeCmd();
+  cmd.focus();
+  cmd.setSelectionRange(cmd.value.length, cmd.value.length);
+}
+// Enter runs the command; like the R console, an unfinished expression continues on a new line.
+// keydown covers hardware keyboards; beforeinput covers phone keyboards that don't send Enter keys.
+function enterShouldRun() {
+  const atEnd = cmd.selectionStart === cmd.value.length;
+  return !(atEnd && continues(cmd.value));
+}
+cmd.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && enterShouldRun()) { e.preventDefault(); runCommand(); }
+});
+cmd.addEventListener("beforeinput", (e) => {
+  if ((e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") && enterShouldRun()) {
+    e.preventDefault();
+    runCommand();
+  }
+});
+cmd.addEventListener("input", sizeCmd);
+document.querySelectorAll("#consoleIn button").forEach((b) => b.addEventListener("pointerdown", (e) => e.preventDefault()));
 
 // ---- Plots ----
 function renderPlots() {
@@ -878,8 +947,8 @@ function openMenu() {
   openSheet('<h2>Menu</h2>' +
     '<div class="item"><button class="main" onclick="closeSheet();toggleAutosave()">Auto-save plots: ' + (auto ? "On" : "Off") +
       '<span class="sub">' + (auto ? "Every new plot is saved to R/plots" : "Plots are saved only when you tap Save") + '</span></button></div>' +
-    '<div class="item"><button class="main" onclick="closeSheet();$(\'console\').innerHTML=\'\'">Clear console</button></div>' +
-    '<div class="item"><button class="main" onclick="closeSheet();copyText($(\'console\').innerText)">Copy console output</button></div>' +
+    '<div class="item"><button class="main" onclick="closeSheet();$(\'consoleOut\').innerHTML=\'\'">Clear console</button></div>' +
+    '<div class="item"><button class="main" onclick="closeSheet();copyText($(\'consoleOut\').innerText)">Copy console output</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();plots=[];plotIndex=-1;renderPlots()">Clear plots</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();restartR()">Restart R</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();showSetup(\'notrunning\')">Setup help</button></div>' +
