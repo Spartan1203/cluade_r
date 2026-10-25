@@ -16,6 +16,17 @@ R Pocket is the interface: a code editor, a Run button, a console, plots, and sa
    and open it. Allow installing from your browser if Android asks.
 4. **Open R Pocket** and allow it to run commands in Termux when asked.
 
+## Optional: Ubuntu R with prebuilt packages and Stan
+
+Termux's own R compiles every package from source, and Stan won't build there. For prebuilt
+CRAN packages (installs take seconds) and full Stan/`cmdstanr` support (e.g. `rethinking::ulam()`),
+run R inside Ubuntu instead. In Termux:
+```
+curl -fsSL https://raw.githubusercontent.com/Spartan1203/cluade_r/main/termux/setup-ubuntu.sh | bash
+```
+This takes 30-60 minutes (mostly building CmdStan) and about 2-3 GB. Afterwards R Pocket starts
+Ubuntu's R automatically; put `termux` in `~/.rpocket/engine` to switch back.
+
 ## Using it
 
 - **Run all** runs the whole editor; **Run line** runs the current line (or full multi-line expression,
