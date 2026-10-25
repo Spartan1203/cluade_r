@@ -10,7 +10,9 @@
   --border: rgba(0,0,0,.12); --border2: rgba(0,0,0,.25);
   --accent: #276dc3; --on-accent: #ffffff; --accent-bg: #e6f1fb;
   --ok: #3b6d11; --ok-bg: #eaf3de; --warn: #854f0b; --warn-bg: #faeeda; --err: #a32d2d; --err-bg: #fcebeb;
+  --curline: rgba(39,109,195,.08);
   --mono: ui-monospace, "Roboto Mono", "Droid Sans Mono", monospace;
+  --lh: 21px;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -18,6 +20,7 @@
     --border: rgba(255,255,255,.12); --border2: rgba(255,255,255,.28);
     --accent: #5b9be6; --on-accent: #0b1a2c; --accent-bg: #0c2a4d;
     --ok: #97c459; --ok-bg: #22330f; --warn: #ef9f27; --warn-bg: #3a2604; --err: #f09595; --err-bg: #3d1414;
+    --curline: rgba(91,155,230,.12);
   }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -35,8 +38,21 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 #status.busy { background: var(--warn-bg); color: var(--warn); }
 #status.bad { background: var(--err-bg); color: var(--err); }
 .spacer { flex: 1; }
-#editor { flex: 1 1 38%; min-height: 90px; width: 100%; resize: none; border: 0; border-bottom: 0.5px solid var(--border);
-  background: var(--bg2); color: var(--text); font: 14px/1.5 var(--mono); padding: 10px 12px; outline: none; tab-size: 2; }
+#scriptbar { display: flex; align-items: center; gap: 6px; padding: 2px 6px 2px 12px; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+#scriptName { border: 0; min-height: 34px; padding: 4px 6px; flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+#scriptName b { color: var(--text); font-weight: 600; }
+#saveBtn { min-height: 32px; padding: 4px 12px; font-size: 13px; }
+#edwrap { flex: 1 1 38%; min-height: 100px; display: flex; background: var(--bg2); border-bottom: 0.5px solid var(--border); overflow: hidden; }
+#gutter { flex: none; min-width: 36px; padding: 10px 6px 30px 6px; font: 12px/var(--lh) var(--mono); color: var(--faint);
+  text-align: right; overflow: hidden; user-select: none; border-right: 0.5px solid var(--border); }
+#gutter div { height: var(--lh); padding: 0 2px; border-radius: 4px; }
+#gutter div.cur { color: var(--text); background: var(--curline); }
+#gutter div.lint { color: var(--warn); background: var(--warn-bg); }
+#gutter div.bad { color: var(--err); background: var(--err-bg); font-weight: 600; }
+#editor { flex: 1; min-width: 0; resize: none; border: 0; background: transparent; color: var(--text);
+  font: 14px/var(--lh) var(--mono); padding: 10px 12px 30px 8px; outline: none; tab-size: 2; white-space: pre; overflow: auto; }
+#diag { display: none; padding: 6px 12px; font-size: 12.5px; border-bottom: 0.5px solid var(--border); }
+#diag.bad { display: block; background: var(--err-bg); color: var(--err); }
 #symbols { display: flex; gap: 6px; padding: 6px 8px; overflow-x: auto; border-bottom: 0.5px solid var(--border); scrollbar-width: none; }
 #symbols::-webkit-scrollbar { display: none; }
 #symbols button { font-family: var(--mono); min-width: 40px; min-height: 34px; padding: 4px 10px; flex: none; }
@@ -45,7 +61,7 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 #runAll { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 #runbar #stopBtn { flex: 0 0 auto; }
 #tabs { display: flex; border-bottom: 0.5px solid var(--border); }
-#tabs button { flex: 1; border: 0; border-radius: 0; color: var(--muted); border-bottom: 2px solid transparent; }
+#tabs button { flex: 1; border: 0; border-radius: 0; color: var(--muted); border-bottom: 2px solid transparent; padding: 8px 4px; }
 #tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 .pane { flex: 1 1 45%; min-height: 0; overflow: auto; display: none; }
 .pane.on { display: block; }
@@ -58,12 +74,23 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 .hint { font-family: system-ui, sans-serif; white-space: normal; color: var(--muted); padding: 12px 0; }
 #plots { padding: 10px; text-align: center; }
 #plots img { max-width: 100%; background: #fff; border-radius: 8px; border: 0.5px solid var(--border); }
-.plotnav { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; color: var(--muted); font-size: 13px; }
-#files { padding: 4px 0; }
-.wd { font-size: 12px; color: var(--muted); padding: 8px 14px; word-break: break-all; }
+.plotnav { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; color: var(--muted); font-size: 13px; }
+.saved { color: var(--ok); }
+.crumbs { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 0.5px solid var(--border); font-size: 13px; color: var(--muted); }
+.crumbs .where { flex: 1; word-break: break-all; }
+.crumbs button { min-height: 32px; padding: 4px 10px; font-size: 13px; }
 .row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 0.5px solid var(--border); }
 .row .name { flex: 1; word-break: break-all; }
 .row .size { color: var(--faint); font-size: 12px; }
+.wd { font-size: 12px; color: var(--muted); padding: 8px 14px; word-break: break-all; }
+.lintbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 0.5px solid var(--border); font-size: 13px; color: var(--muted); }
+.lintbar span { flex: 1; }
+.lintrow { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+.lintrow .loc { font-family: var(--mono); color: var(--muted); flex: none; min-width: 52px; }
+.lintrow .t-error { color: var(--err); }
+.lintrow .t-warning { color: var(--warn); }
+.lintrow .t-style { color: var(--accent); }
+.lintrow .linter { display: block; color: var(--faint); font-size: 12px; font-family: var(--mono); }
 .card { margin: 12px; padding: 14px; border: 0.5px solid var(--border2); border-radius: 12px; font-family: system-ui, sans-serif; white-space: normal; color: var(--text); }
 .card h2 { font-size: 16px; margin: 0 0 8px; }
 .card ol { padding-left: 20px; margin: 8px 0; }
@@ -75,8 +102,10 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 #sheetWrap.on { display: flex; }
 #sheet { background: var(--bg); width: 100%; max-height: 80%; overflow: auto; border-radius: 16px 16px 0 0; padding: 8px 0 16px; }
 #sheet h2 { font-size: 16px; margin: 8px 16px 12px; }
+#sheet img { display: block; max-width: calc(100% - 32px); margin: 0 16px 8px; background: #fff; border-radius: 8px; }
 .sheetrow { display: flex; align-items: center; gap: 8px; padding: 6px 16px; }
-.sheetrow input { flex: 1; font: inherit; color: var(--text); background: var(--bg2); border: 0.5px solid var(--border2); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
+.sheetrow input { flex: 1; font: inherit; color: var(--text); background: var(--bg2); border: 0.5px solid var(--border2); border-radius: 8px; padding: 8px 10px; min-height: 40px; min-width: 0; }
+.fielderr { color: var(--err); font-size: 13px; padding: 0 16px; }
 .item { display: flex; align-items: center; border-top: 0.5px solid var(--border); }
 .item button.main { flex: 1; text-align: left; border: 0; border-radius: 0; padding: 12px 16px; }
 .item .sub { display: block; font: 12px var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80vw; }
@@ -92,8 +121,17 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
   <button class="icon" aria-label="Menu" onclick="openMenu()">&#8942;</button>
 </header>
 
-<textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
-  placeholder="# Type R code here&#10;summary(mtcars)"></textarea>
+<div id="scriptbar">
+  <button id="scriptName" onclick="openScripts()">&#128196; <b>untitled.R</b></button>
+  <button id="saveBtn" onclick="saveScript()">Save</button>
+</div>
+
+<div id="edwrap">
+  <div id="gutter" aria-hidden="true"></div>
+  <textarea id="editor" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
+    placeholder="# Type R code here&#10;summary(mtcars)"></textarea>
+</div>
+<div id="diag"></div>
 
 <div id="symbols"></div>
 
@@ -107,11 +145,13 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
   <button data-tab="console" class="on" onclick="showTab('console')">Console</button>
   <button data-tab="plots" onclick="showTab('plots')">Plots</button>
   <button data-tab="files" onclick="showTab('files')">Files</button>
+  <button data-tab="lint" onclick="showTab('lint')">Lint</button>
 </div>
 
 <div id="console" class="pane on"></div>
 <div id="plots" class="pane"><div class="hint">Plots you make show up here.</div></div>
 <div id="files" class="pane"></div>
+<div id="lint" class="pane"></div>
 
 <div id="sheetWrap" onclick="if (event.target === this) closeSheet()"><div id="sheet"></div></div>
 <div id="toast"></div>
@@ -120,16 +160,25 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 "use strict";
 const $ = (id) => document.getElementById(id);
 const editor = $("editor");
+const gutter = $("gutter");
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 };
 const SETUP_CMD = "curl -fsSL https://raw.githubusercontent.com/Spartan1203/cluade_r/main/termux/setup.sh | bash";
+const LINTR_CMD = "pkg install -y libxml2 && Rscript -e 'install.packages(\"lintr\", repos = \"https://cloud.r-project.org\")'";
+const LH = 21;
 
 let state = "checking";   // checking | starting | ready | busy | down
 let rVersion = "";
-let plots = [];
+let hasLintr = false;
+let plots = [];           // { src, name, saved }
 let plotIndex = -1;
+let filesDir = "";
+let script = store.get("rp.script", null);        // path relative to the R folder, e.g. "scripts/analysis.R"
+let savedCode = store.get("rp.savedCode", null);  // contents at last save or open
+let syntaxErr = null;     // { line, msg }
+let lintLines = new Set();
 
 // ---- Bridge to the Android side ----
 const bridge = window.RBridge;
@@ -145,6 +194,10 @@ function rreq(method, path, body, opts) {
     bridge.request(id, method, path, body || "", !!opts.binary, opts.timeout || 0);
   });
 }
+function qs(params) {
+  return Object.keys(params).map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(params[k])).join("&");
+}
+function parseJson(s) { try { return JSON.parse(s); } catch (e) { return null; } }
 
 // ---- Status ----
 function setStatus(s, label) {
@@ -153,11 +206,13 @@ function setStatus(s, label) {
   el.className = { ready: "ok", busy: "busy", down: "bad" }[s] || "";
   el.textContent = label;
 }
+function readyLabel() { return "R " + rVersion; }
 
 async function ping() {
   const r = await rreq("GET", "/ping", "", { timeout: 3000 });
   if (r.status === 200) {
-    try { const j = JSON.parse(r.body); rVersion = j.r; return j; } catch (e) {}
+    const j = parseJson(r.body);
+    if (j) { rVersion = j.r; hasLintr = !!j.lintr; return j; }
   }
   return null;
 }
@@ -184,12 +239,14 @@ async function connect(forceRestart) {
 }
 
 function ready(j) {
-  setStatus("ready", "R " + j.r + " connected");
+  setStatus("ready", readyLabel());
   clearSetup();
   if (!j.plots && !store.get("rp.noPlotsWarned", false)) {
     addLine("hint", "Plots aren't available in this R install. Re-run the Termux setup command to add plot support.");
     store.set("rp.noPlotsWarned", true);
   }
+  scheduleCheck(0);
+  if ($("lint").classList.contains("on")) renderLintIntro();
 }
 
 function statusTapped() {
@@ -217,19 +274,19 @@ function showSetup(kind, detail) {
       '<p class="hint">If Android won\'t show the prompt, open Settings → Apps → R Pocket → Permissions → Additional permissions, and allow "Run commands in Termux environment".</p>';
   } else {
     c.innerHTML = '<h2>R isn\'t running yet</h2>' +
-      '<ol><li>Open Termux and run this once (tap to copy):<br><code onclick="copySetup()">' + SETUP_CMD + '</code></li>' +
+      '<ol><li>Open Termux and run this once (tap to copy):<br><code onclick="copyText(SETUP_CMD)">' + escapeHtml(SETUP_CMD) + '</code></li>' +
       '<li>Wait for "Done", then come back here and tap Start R.</li></ol>' +
       '<p class="hint">Already set up? Open Termux once so it\'s running, then try again. Some phones also need battery optimization turned off for Termux.</p>' +
       (detail ? '<p class="hint">Details: ' + escapeHtml(detail) + '</p>' : '') +
       '<div class="actions"><button class="primary" onclick="connect(true)">Start R</button>' +
-      '<button onclick="copySetup()">Copy setup command</button>' +
+      '<button onclick="copyText(SETUP_CMD)">Copy setup command</button>' +
       '<button onclick="RBridge.openTermux()">Open Termux</button></div>';
   }
   showTab("console");
   $("console").prepend(c);
 }
 function clearSetup() { const c = $("setupCard"); if (c) c.remove(); }
-function copySetup() { bridge && bridge.copyText(SETUP_CMD); toast("Setup command copied"); }
+function copyText(t) { bridge && bridge.copyText(t); toast("Copied"); }
 
 // ---- Running code ----
 async function run(code) {
@@ -244,8 +301,9 @@ async function run(code) {
     setStatus("down", "R not running");
     return;
   }
-  let res;
-  try { res = JSON.parse(r.body); } catch (e) { addLine("err", "Unreadable reply from R"); setStatus("ready", "R " + rVersion + " connected"); return; }
+  const res = parseJson(r.body);
+  setStatus("ready", readyLabel());
+  if (!res) { addLine("err", "Unreadable reply from R"); return; }
   for (const it of res.items) {
     if (it.t === "input") addLine("in", it.x.split("\n").map((l, i) => (i ? "+ " : "> ") + l).join("\n"));
     else if (it.t === "output") addLine("out", it.x);
@@ -253,35 +311,64 @@ async function run(code) {
     else if (it.t === "warning") addLine("warn", it.x);
     else if (it.t === "error") addLine("err", it.x);
   }
-  setStatus("ready", "R " + rVersion + " connected");
   if (res.plots && res.plots.length) {
-    for (const p of res.plots) {
-      const img = await rreq("GET", "/plot/" + p, "", { binary: true, timeout: 15000 });
-      if (img.status === 200) plots.push("data:image/png;base64," + img.body);
+    const auto = store.get("rp.autosave", false);
+    for (const name of res.plots) {
+      const img = await rreq("GET", "/plot/" + name, "", { binary: true, timeout: 15000 });
+      if (img.status !== 200) continue;
+      const p = { src: "data:image/png;base64," + img.body, name, saved: null };
+      plots.push(p);
+      if (auto) await savePlot(p, true);
     }
     plotIndex = plots.length - 1;
     renderPlots();
     showTab("plots");
   }
+  scheduleCheck(0);
 }
 
 function runAll() { run(editor.value); }
 
+function lineBounds(v, pos) {
+  const s = v.lastIndexOf("\n", pos - 1) + 1;
+  let e = v.indexOf("\n", pos);
+  if (e < 0) e = v.length;
+  return [s, e];
+}
+function isCode(line) { const t = line.trim(); return t.length > 0 && t[0] !== "#"; }
+
 function runLine() {
-  const v = editor.value;
+  let v = editor.value;
   let start = editor.selectionStart, end = editor.selectionEnd;
-  if (end > start) { run(v.slice(start, end)); return; }
-  start = v.lastIndexOf("\n", start - 1) + 1;
-  end = v.indexOf("\n", start);
-  if (end < 0) end = v.length;
-  // Extend through continuation lines of a multi-line expression
-  while (end < v.length && continues(v.slice(start, end))) {
-    const next = v.indexOf("\n", end + 1);
-    end = next < 0 ? v.length : next;
+  let code;
+  if (end > start) {
+    code = v.slice(start, end);
+    end = lineBounds(v, end)[1];
+  } else {
+    [start, end] = lineBounds(v, start);
+    // Skip blank lines and comments, like RStudio
+    while (!isCode(v.slice(start, end)) && end < v.length) [start, end] = lineBounds(v, end + 1);
+    if (!isCode(v.slice(start, end))) { toast("No more code below"); return; }
+    // Extend through continuation lines of a multi-line expression
+    while (end < v.length && continues(v.slice(start, end))) {
+      const next = v.indexOf("\n", end + 1);
+      end = next < 0 ? v.length : next;
+    }
+    code = v.slice(start, end);
   }
-  const code = v.slice(start, end);
-  const after = Math.min(end + 1, v.length);
-  editor.setSelectionRange(after, after);
+  // Move the cursor to the start of the next line with code
+  let target = -1, pos = end + 1;
+  while (pos <= v.length) {
+    const [s, e] = lineBounds(v, pos);
+    if (isCode(v.slice(s, e))) { target = s; break; }
+    if (e >= v.length) break;
+    pos = e + 1;
+  }
+  if (target < 0) {
+    if (!v.endsWith("\n")) { editor.value = v + "\n"; saveEditor(); v = editor.value; }
+    target = v.length;
+  }
+  setCursor(target);
   run(code);
 }
 
@@ -306,6 +393,109 @@ async function restartR() {
   await connect(true);
 }
 
+// ---- Editor: line numbers, cursor, syntax check ----
+function lineOf(pos) { let n = 1; const v = editor.value; for (let i = 0; i < pos && i < v.length; i++) if (v.charCodeAt(i) === 10) n++; return n; }
+function lineCount() { let n = 1; const v = editor.value; for (let i = 0; i < v.length; i++) if (v.charCodeAt(i) === 10) n++; return n; }
+
+let gutterCount = 0;
+function renderGutter() {
+  const n = lineCount();
+  if (n !== gutterCount) {
+    let html = "";
+    for (let i = 1; i <= n; i++) html += "<div>" + i + "</div>";
+    gutter.innerHTML = html;
+    gutterCount = n;
+  }
+  const cur = lineOf(editor.selectionStart);
+  const kids = gutter.children;
+  for (let i = 0; i < kids.length; i++) {
+    const ln = i + 1;
+    kids[i].className = (syntaxErr && syntaxErr.line === ln) ? "bad" : lintLines.has(ln) ? "lint" : (ln === cur ? "cur" : "");
+  }
+  gutter.scrollTop = editor.scrollTop;
+}
+
+function setCursor(pos) {
+  editor.setSelectionRange(pos, pos);
+  scrollToLine(lineOf(pos));
+  renderGutter();
+}
+function scrollToLine(ln) {
+  const top = (ln - 1) * LH;
+  const h = editor.clientHeight;
+  if (top < editor.scrollTop) editor.scrollTop = Math.max(0, top - LH);
+  else if (top + 2 * LH > editor.scrollTop + h) editor.scrollTop = top - h + 3 * LH;
+  gutter.scrollTop = editor.scrollTop;
+}
+function goToLine(ln, col) {
+  const v = editor.value;
+  let pos = 0;
+  for (let i = 1; i < ln; i++) { const nl = v.indexOf("\n", pos); if (nl < 0) break; pos = nl + 1; }
+  const e = lineBounds(v, pos)[1];
+  pos = Math.min(e, pos + Math.max(0, (col || 1) - 1));
+  editor.focus();
+  setCursor(pos);
+}
+
+let checkTimer = null;
+function scheduleCheck(ms) {
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(checkSyntax, ms === undefined ? 700 : ms);
+}
+async function checkSyntax() {
+  if (state !== "ready") return;
+  const code = editor.value;
+  const r = await rreq("POST", "/check", code, { timeout: 4000 });
+  if (r.status !== 200 || code !== editor.value) return;
+  const j = parseJson(r.body);
+  if (!j) return;
+  if (j.ok) syntaxErr = null;
+  else {
+    let line = j.line || 1;
+    const n = lineCount();
+    if (line > n || j.col === 0) {
+      // "Unexpected end of input": point at the last line that has code
+      const lines = editor.value.split("\n");
+      line = Math.min(line, n);
+      while (line > 1 && !isCode(lines[line - 1])) line--;
+    }
+    syntaxErr = { line, msg: j.msg };
+  }
+  renderDiag();
+  renderGutter();
+}
+function renderDiag() {
+  const d = $("diag");
+  if (syntaxErr) {
+    d.className = "bad";
+    d.textContent = "Line " + syntaxErr.line + ": " + syntaxErr.msg;
+    d.onclick = () => goToLine(syntaxErr.line, 1);
+  } else {
+    d.className = "";
+    d.textContent = "";
+  }
+}
+
+editor.addEventListener("input", () => {
+  saveEditor();
+  if (lintLines.size) { lintLines = new Set(); }
+  renderGutter();
+  updateScriptBar();
+  scheduleCheck();
+});
+editor.addEventListener("scroll", () => { gutter.scrollTop = editor.scrollTop; });
+document.addEventListener("selectionchange", () => { if (document.activeElement === editor) renderGutter(); });
+editor.addEventListener("click", renderGutter);
+editor.addEventListener("keyup", renderGutter);
+editor.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    const v = editor.value, s = editor.selectionStart;
+    const lineStart = v.lastIndexOf("\n", s - 1) + 1;
+    const indent = (v.slice(lineStart, s).match(/^\s*/) || [""])[0];
+    if (indent) { e.preventDefault(); insertAtCursor("\n" + indent); }
+  }
+});
+
 // ---- Console ----
 function addLine(cls, text) {
   const d = document.createElement("div");
@@ -322,16 +512,25 @@ function renderPlots() {
   const tab = document.querySelector('#tabs [data-tab="plots"]');
   tab.textContent = plots.length ? "Plots (" + plots.length + ")" : "Plots";
   if (!plots.length) { p.innerHTML = '<div class="hint">Plots you make show up here.</div>'; return; }
+  const cur = plots[plotIndex];
   p.innerHTML = "";
   const img = document.createElement("img");
-  img.src = plots[plotIndex];
+  img.src = cur.src;
   img.alt = "Plot " + (plotIndex + 1);
   p.appendChild(img);
   const nav = document.createElement("div");
   nav.className = "plotnav";
-  nav.innerHTML = '<button onclick="movePlot(-1)">&#8249; Prev</button><span>' + (plotIndex + 1) + " of " + plots.length +
-    '</span><button onclick="movePlot(1)">Next &#8250;</button>';
+  nav.innerHTML = '<button onclick="movePlot(-1)">&#8249;</button>' +
+    '<span>' + (plotIndex + 1) + " of " + plots.length + "</span>" +
+    (cur.saved ? '<span class="saved">&#10003; Saved</span>' : '<button onclick="savePlot(plots[plotIndex])">Save</button>') +
+    '<button onclick="movePlot(1)">&#8250;</button>';
   p.appendChild(nav);
+  if (cur.saved) {
+    const where = document.createElement("div");
+    where.className = "wd";
+    where.textContent = "Saved to R/" + cur.saved;
+    p.appendChild(where);
+  }
   let x0 = null;
   img.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; }, { passive: true });
   img.addEventListener("touchend", (e) => {
@@ -346,18 +545,153 @@ function movePlot(d) {
   plotIndex = Math.max(0, Math.min(plots.length - 1, plotIndex + d));
   renderPlots();
 }
+async function savePlot(p, quiet) {
+  if (!p || p.saved) return;
+  if (state !== "ready" && state !== "busy") { toast("R isn't connected"); return; }
+  const r = await rreq("POST", "/saveplot?" + qs({ name: p.name }), "", { timeout: 8000 });
+  const j = parseJson(r.body);
+  if (r.status === 200 && j && j.ok) {
+    p.saved = j.path;
+    if (!quiet) { toast("Saved to R/" + j.path); renderPlots(); }
+  } else if (!quiet) {
+    toast(r.status === 404 ? "This plot was made before R restarted, so it can't be saved" : "Couldn't save the plot");
+  }
+}
+function toggleAutosave() {
+  const on = !store.get("rp.autosave", false);
+  store.set("rp.autosave", on);
+  toast(on ? "New plots will be saved to R/plots" : "Auto-save is off");
+}
+
+// ---- Scripts ----
+function scriptLabel() { return script ? script.split("/").pop() : "untitled.R"; }
+function isDirty() { return savedCode === null ? editor.value.trim().length > 0 : editor.value !== savedCode; }
+function updateScriptBar() {
+  $("scriptName").innerHTML = "&#128196; <b>" + escapeHtml(scriptLabel()) + "</b>" + (isDirty() ? " &#8226;" : "") +
+    (script && script.indexOf("/") > 0 ? " <span>in " + escapeHtml(script.slice(0, script.lastIndexOf("/"))) + "</span>" : "");
+}
+function setScript(path, code) {
+  script = path;
+  savedCode = code;
+  store.set("rp.script", script);
+  store.set("rp.savedCode", savedCode);
+  updateScriptBar();
+}
+function needR() {
+  if (state === "ready" || state === "busy") return true;
+  toast("Connect to R first. Scripts are saved by R.");
+  return false;
+}
+
+async function saveScript() {
+  if (!script) { openSaveAs(); return; }
+  if (!needR()) return;
+  await writeScript(script);
+}
+async function writeScript(path) {
+  const code = editor.value;
+  const r = await rreq("POST", "/write?" + qs({ path }), code, { timeout: 8000 });
+  const j = parseJson(r.body);
+  if (r.status === 200 && j && j.ok) {
+    setScript(j.path, code);
+    toast("Saved " + j.path);
+    return true;
+  }
+  toast("Couldn't save: " + ((j && j.error) || r.body));
+  return false;
+}
+function openSaveAs() {
+  if (!needR()) return;
+  const suggested = script ? scriptLabel() : "";
+  openSheet('<h2>Save script</h2>' +
+    '<div class="sheetrow"><input id="saveName" placeholder="analysis.R" value="' + escapeHtml(suggested) + '"></div>' +
+    '<div class="fielderr" id="saveErr"></div>' +
+    '<div class="wd">Saved in your phone\'s R/scripts folder.</div>' +
+    '<div class="sheetrow"><button class="primary" style="flex:1" onclick="confirmSaveAs()">Save</button></div>');
+  const inp = $("saveName");
+  inp.addEventListener("input", () => { $("saveErr").textContent = ""; });
+  inp.focus();
+}
+async function confirmSaveAs() {
+  let name = $("saveName").value.trim();
+  if (!name) { $("saveErr").textContent = "Enter a file name"; return; }
+  if (/[\/\\]/.test(name) || name === "." || name === "..") { $("saveErr").textContent = "Use a name without slashes"; return; }
+  if (!/\.r$/i.test(name)) name += ".R";
+  const path = "scripts/" + name;
+  if (path !== script) {
+    const r = await rreq("GET", "/files?" + qs({ dir: "scripts" }), "", { timeout: 5000 });
+    const j = parseJson(r.body);
+    if (j && j.files && j.files.some((f) => f.n === name) && !confirm(name + " already exists. Replace it?")) return;
+  }
+  if (await writeScript(path)) closeSheet();
+}
+
+async function openScript(path) {
+  if (!needR()) return;
+  if (isDirty() && !confirm("Discard unsaved changes to " + scriptLabel() + "?")) return;
+  const r = await rreq("GET", "/read?" + qs({ path }), "", { timeout: 8000 });
+  if (r.status !== 200) { const j = parseJson(r.body); toast("Couldn't open: " + ((j && j.error) || r.status)); return; }
+  editor.value = r.body;
+  saveEditor();
+  setScript(path, r.body);
+  syntaxErr = null; lintLines = new Set();
+  renderDiag();
+  setCursor(0);
+  editor.scrollTop = 0;
+  closeSheet();
+  scheduleCheck(0);
+  toast("Opened " + path);
+}
+function newScript() {
+  if (isDirty() && !confirm("Discard unsaved changes to " + scriptLabel() + "?")) return;
+  editor.value = "";
+  saveEditor();
+  setScript(null, null);
+  syntaxErr = null; lintLines = new Set();
+  renderDiag();
+  renderGutter();
+  closeSheet();
+}
+
+async function openScripts() {
+  let html = '<h2>Scripts</h2>' +
+    '<div class="item"><button class="main" onclick="newScript()">&#65291; New script</button></div>' +
+    '<div class="item"><button class="main" onclick="openSaveAs()">Save as…</button></div>';
+  if (state === "ready" || state === "busy") {
+    const r = await rreq("GET", "/files?" + qs({ dir: "scripts" }), "", { timeout: 5000 });
+    const j = parseJson(r.body);
+    const files = (j && j.files ? j.files : []).filter((f) => !f.d && /\.r$/i.test(f.n));
+    if (files.length) {
+      html += '<div class="wd">In R/scripts</div>';
+      files.sort((a, b) => a.n.localeCompare(b.n));
+      for (const f of files) {
+        html += '<div class="item"><button class="main" data-path="' + escapeHtml("scripts/" + f.n) + '">' + escapeHtml(f.n) +
+          '<span class="sub">' + fmtSize(f.s) + "</span></button></div>";
+      }
+    } else {
+      html += '<div class="wd">No saved scripts yet. Saved scripts go in your phone\'s R/scripts folder.</div>';
+    }
+  } else {
+    html += '<div class="wd">Connect to R to see saved scripts.</div>';
+  }
+  openSheet(html);
+  $("sheet").querySelectorAll("button[data-path]").forEach((b) => b.addEventListener("click", () => openScript(b.dataset.path)));
+}
 
 // ---- Files ----
 async function loadFiles() {
   const f = $("files");
-  if (state !== "ready") { f.innerHTML = '<div class="wd">Connect to R to see files.</div>'; return; }
-  f.innerHTML = '<div class="wd">Loading…</div>';
-  const r = await rreq("GET", "/files", "", { timeout: 5000 });
-  if (r.status !== 200) { f.innerHTML = '<div class="wd">Couldn\'t list files.</div>'; return; }
-  const j = JSON.parse(r.body);
-  let html = '<div class="wd">Working folder: ' + escapeHtml(j.wd) +
-    (j.wd.indexOf("storage/shared/R") >= 0 ? " (Internal storage › R)" : "") + "</div>";
-  if (!j.files.length) html += '<div class="wd">No files yet. Put data files in your phone\'s R folder to use them here.</div>';
+  if (state !== "ready" && state !== "busy") { f.innerHTML = '<div class="wd">Connect to R to see files.</div>'; return; }
+  const r = await rreq("GET", "/files?" + qs({ dir: filesDir }), "", { timeout: 5000 });
+  let j = parseJson(r.body);
+  if (r.status === 404 && filesDir) { filesDir = ""; return loadFiles(); }
+  if (r.status !== 200 || !j) { f.innerHTML = '<div class="wd">Couldn\'t list files.</div>'; return; }
+  const shared = j.base.indexOf("storage/shared/R") >= 0;
+  let html = '<div class="crumbs">' + (filesDir ? '<button onclick="upDir()">&#8592; Up</button>' : "") +
+    '<span class="where">' + (shared ? "Internal storage › R" : escapeHtml(j.base)) +
+    (filesDir ? " › " + escapeHtml(filesDir.split("/").join(" › ")) : "") + "</span>" +
+    '<button onclick="loadFiles()">Refresh</button></div>';
+  if (!j.files.length) html += '<div class="wd">' + (filesDir ? "This folder is empty." : "No files yet. Put data files in your phone's R folder to use them here.") + "</div>";
   j.files.sort((a, b) => (b.d - a.d) || a.n.localeCompare(b.n));
   for (const x of j.files) {
     html += '<div class="row" data-name="' + escapeHtml(x.n) + '" data-dir="' + x.d + '">' +
@@ -367,18 +701,40 @@ async function loadFiles() {
   f.innerHTML = html;
   f.querySelectorAll(".row").forEach((row) => row.addEventListener("click", () => fileTapped(row.dataset.name, row.dataset.dir === "true")));
 }
+function upDir() {
+  filesDir = filesDir.indexOf("/") >= 0 ? filesDir.slice(0, filesDir.lastIndexOf("/")) : "";
+  loadFiles();
+}
 function fileTapped(name, isDir) {
-  const q = JSON.stringify(name);
+  const rel = filesDir ? filesDir + "/" + name : name;
+  if (isDir) { filesDir = rel; loadFiles(); return; }
   const ext = (name.split(".").pop() || "").toLowerCase();
+  const q = JSON.stringify(rel);
+  if (ext === "r") {
+    openSheet('<h2>' + escapeHtml(name) + '</h2>' +
+      '<div class="item"><button class="main" id="fOpen">Open in editor</button></div>' +
+      '<div class="item"><button class="main" id="fSource">Run it with source()</button></div>' +
+      '<div class="item"><button class="main" id="fInsert">Insert the file path</button></div>');
+    $("fOpen").onclick = () => openScript(rel);
+    $("fSource").onclick = () => { closeSheet(); run("source(" + q + ", echo = TRUE)"); };
+    $("fInsert").onclick = () => { closeSheet(); insertAtCursor(q); };
+    return;
+  }
+  if (ext === "png" || ext === "jpg" || ext === "jpeg") { previewImage(rel, ext); return; }
   let code;
-  if (isDir) code = "list.files(" + q + ")";
-  else if (ext === "csv") code = "df <- read.csv(" + q + ")";
+  if (ext === "csv") code = "df <- read.csv(" + q + ")";
   else if (ext === "tsv" || ext === "txt") code = "df <- read.delim(" + q + ")";
   else if (ext === "rds") code = "obj <- readRDS(" + q + ")";
-  else if (ext === "r") code = "source(" + q + ")";
+  else if (ext === "rdata" || ext === "rda") code = "load(" + q + ")";
   else code = q;
   insertAtCursor(code);
   toast("Added to editor");
+}
+async function previewImage(rel, ext) {
+  const r = await rreq("GET", "/read?" + qs({ path: rel }), "", { binary: true, timeout: 15000 });
+  if (r.status !== 200) { toast("Couldn't open the image"); return; }
+  openSheet('<h2>' + escapeHtml(rel.split("/").pop()) + '</h2><img alt="" src="data:image/' + (ext === "png" ? "png" : "jpeg") + ";base64," + r.body + '">' +
+    '<div class="wd">R/' + escapeHtml(rel) + "</div>");
 }
 function fmtSize(b) {
   if (b < 1024) return b + " B";
@@ -386,11 +742,58 @@ function fmtSize(b) {
   return (b / 1048576).toFixed(1) + " MB";
 }
 
+// ---- Lint ----
+function renderLintIntro() {
+  const l = $("lint");
+  if (state !== "ready" && state !== "busy") { l.innerHTML = '<div class="wd">Connect to R to lint your code.</div>'; return; }
+  if (!hasLintr) {
+    l.innerHTML = '<div class="card"><h2>Install lintr for style checks</h2>' +
+      '<p>Syntax errors are already checked as you type. For style and common-mistake checks, install the <code>lintr</code> package. In Termux, run (tap to copy):</p>' +
+      '<p><code onclick="copyText(LINTR_CMD)">' + escapeHtml(LINTR_CMD) + '</code></p>' +
+      '<p class="hint">It takes several minutes. When it\'s done, tap ■ to restart R.</p>' +
+      '<div class="actions"><button onclick="copyText(LINTR_CMD)">Copy command</button><button onclick="RBridge.openTermux()">Open Termux</button></div></div>';
+    return;
+  }
+  if (!l.querySelector(".lintbar")) {
+    l.innerHTML = '<div class="lintbar"><span>Check the editor\'s code with lintr</span><button class="primary" onclick="runLint()">Lint</button></div>';
+  }
+}
+async function runLint() {
+  if (state !== "ready") { toast(state === "busy" ? "R is busy" : "R isn't connected"); return; }
+  const l = $("lint");
+  const code = editor.value;
+  if (!code.trim()) { toast("The editor is empty"); return; }
+  setStatus("busy", "Linting…");
+  l.innerHTML = '<div class="lintbar"><span>Linting…</span></div>';
+  const r = await rreq("POST", "/lint", code, { timeout: 0 });
+  setStatus("ready", readyLabel());
+  const j = parseJson(r.body);
+  if (r.status !== 200 || !j) { l.innerHTML = '<div class="wd">Lint failed.</div>'; return; }
+  if (!j.installed) { hasLintr = false; renderLintIntro(); return; }
+  let html = '<div class="lintbar"><span>' + (j.error ? "lintr hit an error" : j.lints.length ? j.lints.length + " issue" + (j.lints.length === 1 ? "" : "s") : "No issues found") +
+    '</span><button class="primary" onclick="runLint()">Lint again</button></div>';
+  if (j.error) html += '<div class="wd">' + escapeHtml(j.error) + "</div>";
+  lintLines = new Set();
+  j.lints.forEach((x, i) => {
+    lintLines.add(x.line);
+    html += '<div class="lintrow" data-i="' + i + '"><span class="loc">' + x.line + ":" + x.col + '</span><span><span class="t-' + escapeHtml(x.type) + '">' +
+      escapeHtml(x.type) + "</span> " + escapeHtml(x.msg) + '<span class="linter">' + escapeHtml(x.linter) + "</span></span></div>";
+  });
+  l.innerHTML = html;
+  l.querySelectorAll(".lintrow").forEach((row) => row.addEventListener("click", () => {
+    const x = j.lints[+row.dataset.i];
+    goToLine(x.line, x.col);
+  }));
+  renderGutter();
+  if (!j.lints.length && !j.error) toast("No lint issues");
+}
+
 // ---- Tabs ----
 function showTab(name) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("on", p.id === name));
   if (name === "files") loadFiles();
+  if (name === "lint") renderLintIntro();
 }
 
 // ---- Editor helpers ----
@@ -406,6 +809,9 @@ function insertAtCursor(before, after) {
   editor.setSelectionRange(pos, pos);
   editor.focus();
   saveEditor();
+  renderGutter();
+  updateScriptBar();
+  scheduleCheck();
 }
 function buildSymbols() {
   const bar = $("symbols");
@@ -418,15 +824,9 @@ function buildSymbols() {
   }
 }
 function saveEditor() { store.set("rp.code", editor.value); }
-editor.addEventListener("input", saveEditor);
-editor.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    const v = editor.value, s = editor.selectionStart;
-    const lineStart = v.lastIndexOf("\n", s - 1) + 1;
-    const indent = (v.slice(lineStart, s).match(/^\s*/) || [""])[0];
-    if (indent) { e.preventDefault(); insertAtCursor("\n" + indent); }
-  }
-});
+
+// Run buttons keep the editor's focus and cursor, so the keyboard doesn't jump around
+document.querySelectorAll("#runbar button, #saveBtn").forEach((b) => b.addEventListener("pointerdown", (e) => e.preventDefault()));
 
 // ---- Sheets: snippets and menu ----
 function openSheet(html) { $("sheet").innerHTML = html; $("sheetWrap").classList.add("on"); }
@@ -461,6 +861,9 @@ function loadSnippet(i) {
   if (editor.value.trim() && !confirm("Replace the code in the editor with \"" + s.name + "\"?")) return;
   editor.value = s.code;
   saveEditor();
+  renderGutter();
+  updateScriptBar();
+  scheduleCheck();
   closeSheet();
 }
 function deleteSnippet(i) {
@@ -471,15 +874,17 @@ function deleteSnippet(i) {
 }
 
 function openMenu() {
+  const auto = store.get("rp.autosave", false);
   openSheet('<h2>Menu</h2>' +
+    '<div class="item"><button class="main" onclick="closeSheet();toggleAutosave()">Auto-save plots: ' + (auto ? "On" : "Off") +
+      '<span class="sub">' + (auto ? "Every new plot is saved to R/plots" : "Plots are saved only when you tap Save") + '</span></button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();$(\'console\').innerHTML=\'\'">Clear console</button></div>' +
-    '<div class="item"><button class="main" onclick="closeSheet();copyConsole()">Copy console output</button></div>' +
+    '<div class="item"><button class="main" onclick="closeSheet();copyText($(\'console\').innerText)">Copy console output</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();plots=[];plotIndex=-1;renderPlots()">Clear plots</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();restartR()">Restart R</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();showSetup(\'notrunning\')">Setup help</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();RBridge.openTermux()">Open Termux</button></div>');
 }
-function copyConsole() { bridge && bridge.copyText($("console").innerText); toast("Console copied"); }
 
 // ---- Misc ----
 let toastTimer = null;
@@ -488,7 +893,7 @@ function toast(msg) {
   t.textContent = msg;
   t.style.display = "block";
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.style.display = "none"; }, 2200);
+  toastTimer = setTimeout(() => { t.style.display = "none"; }, 2400);
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -496,6 +901,8 @@ function escapeHtml(s) {
 
 buildSymbols();
 editor.value = store.get("rp.code", "# Welcome to R Pocket\nx <- rnorm(100)\nsummary(x)\nhist(x)\n");
+updateScriptBar();
+renderGutter();
 document.addEventListener("visibilitychange", () => { if (!document.hidden && state === "down") connect(false); });
 connect(false);
 </script>

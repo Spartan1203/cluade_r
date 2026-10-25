@@ -56,6 +56,98 @@ call_label <- function(call) {
 
 json_bool <- function(x) if (isTRUE(x)) "true" else "false"
 
+# Folder the app's Files tab, scripts and saved plots live in (set by start.sh)
+base_dir <- normalizePath(getwd())
+
+url_decode <- function(x) {
+  x <- utils::URLdecode(gsub("+", " ", x, fixed = TRUE))
+  Encoding(x) <- "UTF-8"
+  x
+}
+
+parse_query <- function(path) {
+  out <- list()
+  if (!grepl("?", path, fixed = TRUE)) return(out)
+  q <- sub("^[^?]*\\?", "", path)
+  for (kv in strsplit(q, "&", fixed = TRUE)[[1]]) {
+    if (!nzchar(kv)) next
+    p <- regexpr("=", kv, fixed = TRUE)
+    if (p > 0) out[[url_decode(substr(kv, 1, p - 1))]] <- url_decode(substring(kv, p + 1))
+    else out[[url_decode(kv)]] <- ""
+  }
+  out
+}
+
+# Resolve a path relative to base_dir, refusing anything that climbs out of it
+safe_path <- function(rel) {
+  if (is.null(rel)) rel <- ""
+  rel <- gsub("\\", "/", rel, fixed = TRUE)
+  parts <- strsplit(rel, "/", fixed = TRUE)[[1]]
+  parts <- parts[nzchar(parts) & parts != "."]
+  if (any(parts == "..") || startsWith(rel, "~")) return(NULL)
+  if (!length(parts)) return(base_dir)
+  do.call(file.path, as.list(c(base_dir, parts)))
+}
+
+rel_of <- function(full) {
+  r <- substring(full, nchar(base_dir) + 2L)
+  if (is.na(r)) "" else r
+}
+
+check_code <- function(code) {
+  msg <- tryCatch({ parse(text = code, keep.source = FALSE); NULL },
+                  error = function(e) conditionMessage(e))
+  if (is.null(msg)) return("{\"ok\":true}")
+  m <- regmatches(msg, regexec("^<text>:([0-9]+):([0-9]+): ([^\n]*)", msg))[[1]]
+  if (length(m) == 4) {
+    paste0("{\"ok\":false,\"line\":", m[2], ",\"col\":", m[3], ",\"msg\":", json_str(m[4]), "}")
+  } else {
+    paste0("{\"ok\":false,\"line\":0,\"col\":0,\"msg\":", json_str(msg), "}")
+  }
+}
+
+lint_code <- function(code) {
+  if (!requireNamespace("lintr", quietly = TRUE)) return("{\"installed\":false,\"lints\":[]}")
+  if (!grepl("\n$", code)) code <- paste0(code, "\n")
+  lints <- tryCatch(suppressMessages(lintr::lint(text = code)), error = function(e) e)
+  if (inherits(lints, "error")) {
+    return(paste0("{\"installed\":true,\"error\":", json_str(conditionMessage(lints)), ",\"lints\":[]}"))
+  }
+  items <- vapply(lints, function(l) paste0(
+    "{\"line\":", as.integer(l$line_number), ",\"col\":", as.integer(l$column_number),
+    ",\"type\":", json_str(l$type), ",\"msg\":", json_str(l$message),
+    ",\"linter\":", json_str(if (is.null(l$linter)) "" else l$linter), "}"), "")
+  paste0("{\"installed\":true,\"lints\":[", paste(items, collapse = ","), "]}")
+}
+
+list_dir <- function(rel) {
+  dir <- safe_path(rel)
+  if (is.null(dir) || !dir.exists(dir)) return(NULL)
+  f <- list.files(dir, all.files = FALSE, no.. = TRUE)
+  info <- file.info(file.path(dir, f))
+  entries <- vapply(seq_along(f), function(i) paste0(
+    "{\"n\":", json_str(f[i]), ",\"d\":", json_bool(info$isdir[i]),
+    ",\"s\":", if (is.na(info$size[i])) 0 else format(info$size[i], scientific = FALSE), "}"), "")
+  paste0("{\"base\":", json_str(base_dir), ",\"dir\":", json_str(rel_of(dir)),
+         ",\"files\":[", paste(entries, collapse = ","), "]}")
+}
+
+save_plot <- function(name) {
+  src <- file.path(plot_dir, basename(name))
+  if (!grepl("^p[0-9]+_[0-9]+\\.png$", basename(name)) || !file.exists(src)) return(NULL)
+  dest_dir <- safe_path("plots")
+  dir.create(dest_dir, showWarnings = FALSE, recursive = TRUE)
+  stem <- format(Sys.time(), "plot_%Y%m%d_%H%M%S")
+  dest <- file.path(dest_dir, paste0(stem, ".png"))
+  n <- 2L
+  while (file.exists(dest)) {
+    dest <- file.path(dest_dir, sprintf("%s_%d.png", stem, n))
+    n <- n + 1L
+  }
+  if (!file.copy(src, dest)) return(NULL)
+  rel_of(dest)
+}
+
 run_code <- function(code) {
   items <- character()
   add <- function(type, text) {
@@ -186,12 +278,14 @@ handle <- function(con) {
     return(respond(con, "401 Unauthorized", "{\"error\":\"bad token\"}"))
   }
   path <- sub("\\?.*$", "", req$path)
+  query <- parse_query(req$path)
 
   if (path == "/ping") {
     respond(con, "200 OK", paste0(
       "{\"ok\":true,\"r\":", json_str(paste(R.version$major, R.version$minor, sep = ".")),
       ",\"plots\":", json_bool(!is.null(.rp$open_device)),
-      ",\"wd\":", json_str(getwd()), "}"))
+      ",\"wd\":", json_str(base_dir),
+      ",\"lintr\":", json_bool(requireNamespace("lintr", quietly = TRUE)), "}"))
   } else if (path == "/eval" && req$method == "POST") {
     res <- run_code(req$body)
     respond(con, "200 OK", paste0(
@@ -205,13 +299,35 @@ handle <- function(con) {
       respond(con, "404 Not Found", "{\"error\":\"no such plot\"}")
     }
   } else if (path == "/files") {
-    f <- list.files(getwd(), all.files = FALSE, no.. = TRUE)
-    info <- file.info(file.path(getwd(), f))
-    entries <- vapply(seq_along(f), function(i) paste0(
-      "{\"n\":", json_str(f[i]), ",\"d\":", json_bool(info$isdir[i]),
-      ",\"s\":", if (is.na(info$size[i])) 0 else format(info$size[i], scientific = FALSE), "}"), "")
-    respond(con, "200 OK", paste0("{\"wd\":", json_str(getwd()), ",\"files\":[",
-                                  paste(entries, collapse = ","), "]}"))
+    out <- list_dir(query$dir)
+    if (is.null(out)) respond(con, "404 Not Found", "{\"error\":\"no such folder\"}")
+    else respond(con, "200 OK", out)
+  } else if (path == "/check" && req$method == "POST") {
+    respond(con, "200 OK", check_code(req$body))
+  } else if (path == "/lint" && req$method == "POST") {
+    respond(con, "200 OK", lint_code(req$body))
+  } else if (path == "/read") {
+    f <- safe_path(query$path)
+    if (is.null(f) || !file.exists(f) || dir.exists(f)) {
+      respond(con, "404 Not Found", "{\"error\":\"no such file\"}")
+    } else if (file.info(f)$size > 2e6) {
+      respond(con, "413 Payload Too Large", "{\"error\":\"file is over 2 MB\"}")
+    } else {
+      respond(con, "200 OK", readBin(f, "raw", file.info(f)$size), "text/plain; charset=utf-8")
+    }
+  } else if (path == "/write" && req$method == "POST") {
+    f <- safe_path(query$path)
+    if (is.null(f) || !nzchar(basename(f)) || identical(f, base_dir) || dir.exists(f)) {
+      respond(con, "400 Bad Request", "{\"error\":\"bad file name\"}")
+    } else {
+      dir.create(dirname(f), showWarnings = FALSE, recursive = TRUE)
+      writeBin(charToRaw(enc2utf8(req$body)), f)
+      respond(con, "200 OK", paste0("{\"ok\":true,\"path\":", json_str(rel_of(f)), "}"))
+    }
+  } else if (path == "/saveplot" && req$method == "POST") {
+    saved <- save_plot(if (is.null(query$name)) "" else query$name)
+    if (is.null(saved)) respond(con, "404 Not Found", "{\"error\":\"no such plot\"}")
+    else respond(con, "200 OK", paste0("{\"ok\":true,\"path\":", json_str(saved), "}"))
   } else {
     respond(con, "404 Not Found", "{\"error\":\"unknown path\"}")
   }
