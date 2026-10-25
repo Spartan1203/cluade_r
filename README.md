@@ -3,18 +3,24 @@
 Run real, native R on your Android phone. R itself runs inside [Termux](https://f-droid.org/packages/com.termux/);
 R Pocket is the interface: a code editor, a Run button, a console, plots, and saved snippets.
 
-## Install (one time)
+## Install on a new device (recommended)
 
 1. **Install Termux from F-Droid** (not the Play Store version) and open it once.
-2. **Set up R in Termux.** Paste this into Termux and wait for "Done":
+2. **Set everything up.** Paste this into Termux and wait for "Done" (30-60 minutes; keep Termux open,
+   tap Allow if it asks for storage access):
    ```
-   curl -fsSL https://raw.githubusercontent.com/Spartan1203/cluade_r/main/termux/setup.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/Spartan1203/cluade_r/main/termux/install.sh | bash
    ```
-   Tap Allow if it asks for storage access.
-3. **Install the app.** On your phone, download
+   This installs R inside Ubuntu with prebuilt CRAN packages, `cmdstanr`, CmdStan and `rethinking`.
+3. **Install the app.** On the device, download
    [RPocket.apk](https://github.com/Spartan1203/cluade_r/releases/latest/download/RPocket.apk)
    and open it. Allow installing from your browser if Android asks.
 4. **Open R Pocket** and allow it to run commands in Termux when asked.
+
+### Lighter alternative: Termux's own R
+
+`termux/setup.sh` installs R directly in Termux instead (no Ubuntu, less storage). Packages compile
+from source there, which is slow, and Stan isn't available.
 
 ## Optional: Ubuntu R with prebuilt packages and Stan
 
