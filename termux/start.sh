@@ -25,8 +25,17 @@ fi
 ENGINE="auto"
 [ -f "$DIR/engine" ] && ENGINE="$(tr -d '[:space:]' < "$DIR/engine")"
 if [ "$ENGINE" = "auto" ]; then
-  if [ -x "$UBUNTU_ROOT/usr/bin/Rscript" ]; then ENGINE="ubuntu"; else ENGINE="termux"; fi
+  # Rscript inside the rootfs is a symlink to an absolute path, so check with -L / -e,
+  # then ask proot-distro itself in case the rootfs lives somewhere else
+  if [ -L "$UBUNTU_ROOT/usr/bin/Rscript" ] || [ -e "$UBUNTU_ROOT/usr/lib/R/bin/Rscript" ] ||
+     proot-distro login ubuntu -- test -e /usr/bin/Rscript > /dev/null 2>&1; then
+    ENGINE="ubuntu"
+  else
+    ENGINE="termux"
+  fi
 fi
+
+echo "R Pocket: starting $ENGINE R in $WD" > "$DIR/log.txt"
 
 if [ "$ENGINE" = "ubuntu" ]; then
   # Same folder appears at the same relative place inside Ubuntu
@@ -36,9 +45,9 @@ if [ "$ENGINE" = "ubuntu" ]; then
     --bind "$DIR:/opt/rpocket" \
     --bind "$WD_REAL:/root/storage/shared/R" \
     -- bash -c "cd /root/storage/shared/R && exec Rscript /opt/rpocket/rserver.R $PORT $TOKEN" \
-    > "$DIR/log.txt" 2>&1 < /dev/null &
+    >> "$DIR/log.txt" 2>&1 < /dev/null &
 else
   cd "$WD" || cd "$HOME"
-  setsid nohup Rscript "$DIR/rserver.R" "$PORT" "$TOKEN" > "$DIR/log.txt" 2>&1 < /dev/null &
+  setsid nohup Rscript "$DIR/rserver.R" "$PORT" "$TOKEN" >> "$DIR/log.txt" 2>&1 < /dev/null &
 fi
 exit 0
