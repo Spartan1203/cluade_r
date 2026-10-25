@@ -11,6 +11,8 @@
   --accent: #276dc3; --on-accent: #ffffff; --accent-bg: #e6f1fb;
   --ok: #3b6d11; --ok-bg: #eaf3de; --warn: #854f0b; --warn-bg: #faeeda; --err: #a32d2d; --err-bg: #fcebeb;
   --curline: rgba(39,109,195,.08);
+  --hl-com: #8a8983; --hl-str: #3b7d23; --hl-num: #a85a0b; --hl-kw: #7a3fb0; --hl-const: #b8462b;
+  --hl-fn: #1f5fae; --hl-arg: #0f7a6e; --hl-ns: #6b6b66; --hl-op: #a03d6a;
   --mono: ui-monospace, "Roboto Mono", "Droid Sans Mono", monospace;
   --lh: 21px;
 }
@@ -21,6 +23,8 @@
     --accent: #5b9be6; --on-accent: #0b1a2c; --accent-bg: #0c2a4d;
     --ok: #97c459; --ok-bg: #22330f; --warn: #ef9f27; --warn-bg: #3a2604; --err: #f09595; --err-bg: #3d1414;
     --curline: rgba(91,155,230,.12);
+    --hl-com: #8c8b84; --hl-str: #97c459; --hl-num: #f0a35a; --hl-kw: #c5a3f0; --hl-const: #f0997b;
+    --hl-fn: #85b7eb; --hl-arg: #5dcaa5; --hl-ns: #a8a7a0; --hl-op: #ed93b1;
   }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -49,8 +53,23 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 #gutter div.cur { color: var(--text); background: var(--curline); }
 #gutter div.lint { color: var(--warn); background: var(--warn-bg); }
 #gutter div.bad { color: var(--err); background: var(--err-bg); font-weight: 600; }
-#editor { flex: 1; min-width: 0; resize: none; border: 0; background: transparent; color: var(--text);
-  font: 14px/var(--lh) var(--mono); padding: 10px 12px 30px 8px; outline: none; tab-size: 2; white-space: pre; overflow: auto; }
+.edbox { position: relative; flex: 1; min-width: 0; }
+#hl, #editor { position: absolute; inset: 0; margin: 0; font: 14px/var(--lh) var(--mono); padding: 10px 12px 30px 8px;
+  tab-size: 2; white-space: pre; letter-spacing: 0; }
+#hl { overflow: hidden; pointer-events: none; color: var(--text); }
+#editor { width: 100%; height: 100%; color: transparent; caret-color: var(--text); -webkit-text-fill-color: transparent; }
+#editor::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
+#editor::selection { background: rgba(39,109,195,.28); }
+.tk-com { color: var(--hl-com); font-style: italic; }
+.tk-str { color: var(--hl-str); }
+.tk-num { color: var(--hl-num); }
+.tk-kw { color: var(--hl-kw); }
+.tk-const { color: var(--hl-const); }
+.tk-fn { color: var(--hl-fn); }
+.tk-arg { color: var(--hl-arg); }
+.tk-ns { color: var(--hl-ns); }
+.tk-op { color: var(--hl-op); }
+#editor { resize: none; border: 0; background: transparent; outline: none; overflow: auto; }
 #diag { display: none; padding: 6px 12px; font-size: 12.5px; border-bottom: 0.5px solid var(--border); }
 #diag.bad { display: block; background: var(--err-bg); color: var(--err); }
 #symbols { display: flex; gap: 6px; padding: 6px 8px; overflow-x: auto; border-bottom: 0.5px solid var(--border); scrollbar-width: none; }
@@ -98,6 +117,13 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 .lintrow .t-warning { color: var(--warn); }
 .lintrow .t-style { color: var(--accent); }
 .lintrow .linter { display: block; color: var(--faint); font-size: 12px; font-family: var(--mono); }
+.pkgform { display: flex; gap: 8px; padding: 10px; border-bottom: 0.5px solid var(--border); }
+.pkgform input { flex: 1; min-width: 0; font: 14px var(--mono); color: var(--text); background: var(--bg2); border: 0.5px solid var(--border2); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
+.pkgrow { display: flex; gap: 10px; align-items: baseline; padding: 9px 14px; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+.pkgrow .name { flex: 1; font-family: var(--mono); word-break: break-all; }
+.pkgrow .ok { color: var(--ok); }
+.pkgrow .bad { color: var(--err); }
+.pkgrow .wait { color: var(--muted); }
 .card { margin: 12px; padding: 14px; border: 0.5px solid var(--border2); border-radius: 12px; font-family: system-ui, sans-serif; white-space: normal; color: var(--text); }
 .card h2 { font-size: 16px; margin: 0 0 8px; }
 .card ol { padding-left: 20px; margin: 8px 0; }
@@ -135,8 +161,11 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 
 <div id="edwrap">
   <div id="gutter" aria-hidden="true"></div>
+  <div class="edbox">
+  <pre id="hl" aria-hidden="true"></pre>
   <textarea id="editor" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
     placeholder="# Type R code here&#10;summary(mtcars)"></textarea>
+  </div>
 </div>
 <div id="diag"></div>
 
@@ -153,6 +182,7 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
   <button data-tab="plots" onclick="showTab('plots')">Plots</button>
   <button data-tab="files" onclick="showTab('files')">Files</button>
   <button data-tab="lint" onclick="showTab('lint')">Lint</button>
+  <button data-tab="pkgs" onclick="showTab('pkgs')">Packages</button>
 </div>
 
 <div id="console" class="pane on">
@@ -169,6 +199,15 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 <div id="plots" class="pane"><div class="hint">Plots you make show up here.</div></div>
 <div id="files" class="pane"></div>
 <div id="lint" class="pane"></div>
+<div id="pkgs" class="pane">
+  <div class="pkgform">
+    <input id="pkgName" placeholder="dplyr tidyr  or  user/repo" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" aria-label="Packages to install">
+    <button class="primary" onclick="installPackages()">Install</button>
+  </div>
+  <div class="fielderr" id="pkgErr"></div>
+  <div class="wd">Separate several packages with spaces or commas. For a GitHub package, type <b>user/repo</b>. Details appear in the Console.</div>
+  <div id="pkgLog"></div>
+</div>
 
 <div id="sheetWrap" onclick="if (event.target === this) closeSheet()"><div id="sheet"></div></div>
 <div id="toast"></div>
@@ -306,21 +345,22 @@ function clearSetup() { const c = $("setupCard"); if (c) c.remove(); }
 function copyText(t) { bridge && bridge.copyText(t); toast("Copied"); }
 
 // ---- Running code ----
-async function run(code) {
-  if (!code.trim()) return;
-  if (state === "busy") { toast("R is still running the last command"); return; }
-  if (state !== "ready") { toast("R isn't connected yet"); connect(false); return; }
-  setStatus("busy", "Running…");
-  showTab("console");
+async function run(code, opts) {
+  opts = opts || {};
+  if (!code.trim()) return null;
+  if (state === "busy") { toast("R is still running the last command"); return null; }
+  if (state !== "ready") { toast("R isn't connected yet"); connect(false); return null; }
+  setStatus("busy", opts.label || "Running…");
+  if (!opts.stay) showTab("console");
   const r = await rreq("POST", "/eval", code, { timeout: 0 });
   if (r.status !== 200) {
     addLine("err", "Lost connection to R. " + (r.status ? "" : r.body));
     setStatus("down", "R not running");
-    return;
+    return null;
   }
   const res = parseJson(r.body);
   setStatus("ready", readyLabel());
-  if (!res) { addLine("err", "Unreadable reply from R"); return; }
+  if (!res) { addLine("err", "Unreadable reply from R"); return null; }
   for (const it of res.items) {
     if (it.t === "input") addLine("in", it.x.split("\n").map((l, i) => (i ? "+ " : "> ") + l).join("\n"));
     else if (it.t === "output") addLine("out", it.x);
@@ -339,9 +379,10 @@ async function run(code) {
     }
     plotIndex = plots.length - 1;
     renderPlots();
-    showTab("plots");
+    if (!opts.stay) showTab("plots");
   }
   scheduleCheck(0);
+  return res;
 }
 
 function runAll() { run(editor.value); }
@@ -500,7 +541,7 @@ editor.addEventListener("input", () => {
   updateScriptBar();
   scheduleCheck();
 });
-editor.addEventListener("scroll", () => { gutter.scrollTop = editor.scrollTop; });
+editor.addEventListener("scroll", syncScroll);
 document.addEventListener("selectionchange", () => { if (document.activeElement === editor) renderGutter(); });
 editor.addEventListener("click", renderGutter);
 editor.addEventListener("keyup", renderGutter);
@@ -512,6 +553,101 @@ editor.addEventListener("keydown", (e) => {
     if (indent) { e.preventDefault(); insertAtCursor("\n" + indent); }
   }
 });
+
+// ---- Syntax coloring ----
+const hl = $("hl");
+const R_KEYWORDS = new Set(["if", "else", "for", "while", "repeat", "function", "return", "next", "break", "in"]);
+const R_CONSTS = new Set(["TRUE", "FALSE", "T", "F", "NULL", "NA", "NA_integer_", "NA_real_", "NA_character_", "NA_complex_", "Inf", "NaN"]);
+const TOKEN_RE = /(#[^\n]*)|("(?:[^"\\]|\\[\s\S])*"?|'(?:[^'\\]|\\[\s\S])*'?|`[^`\n]*`?)|(\b0[xX][0-9a-fA-F]+L?\b|(?:\b\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[Li]?\b)|([A-Za-z.][A-Za-z0-9._]*)|(<<-|->>|<-|->|\|>|%[^%\n]*%|==|!=|<=|>=|&&|\|\||::?:?|[-+*\/^~!&|<>=$@?])/g;
+function esc(t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function highlight(src) {
+  let out = "", last = 0, depth = 0, m;
+  TOKEN_RE.lastIndex = 0;
+  while ((m = TOKEN_RE.exec(src)) !== null) {
+    const between = src.slice(last, m.index);
+    for (const ch of between) { if (ch === "(" || ch === "[") depth++; else if ((ch === ")" || ch === "]") && depth > 0) depth--; }
+    out += esc(between);
+    const t = m[0];
+    let cls = null;
+    if (m[1] !== undefined) cls = "com";
+    else if (m[2] !== undefined) cls = "str";
+    else if (m[3] !== undefined) cls = "num";
+    else if (m[4] !== undefined) {
+      if (R_KEYWORDS.has(t)) cls = "kw";
+      else if (R_CONSTS.has(t)) cls = "const";
+      else {
+        const rest = src.slice(TOKEN_RE.lastIndex, TOKEN_RE.lastIndex + 40);
+        if (/^\s*::/.test(rest)) cls = "ns";
+        else if (/^\s*\(/.test(rest)) cls = "fn";
+        else if (depth > 0 && /^\s*=(?!=)/.test(rest)) cls = "arg";
+      }
+    } else if (m[5] !== undefined) cls = t === "::" || t === ":::" ? "ns" : "op";
+    out += cls ? '<span class="tk-' + cls + '">' + esc(t) + "</span>" : esc(t);
+    last = TOKEN_RE.lastIndex;
+    if (t.length === 0) TOKEN_RE.lastIndex++;
+  }
+  out += esc(src.slice(last));
+  // A trailing newline needs a character after it so the last empty line keeps its height
+  return out + "\n ";
+}
+function renderHighlight() { hl.innerHTML = highlight(editor.value); syncScroll(); }
+function syncScroll() {
+  hl.scrollTop = editor.scrollTop;
+  hl.scrollLeft = editor.scrollLeft;
+  gutter.scrollTop = editor.scrollTop;
+}
+
+// ---- Packages ----
+const PKG_RE = /^[A-Za-z][A-Za-z0-9.]*[A-Za-z0-9]$/;
+const GH_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(@[A-Za-z0-9_.\/-]+)?$/;
+$("pkgName").addEventListener("input", () => { $("pkgErr").textContent = ""; });
+$("pkgName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); installPackages(); } });
+async function installPackages() {
+  const names = $("pkgName").value.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+  if (!names.length) { $("pkgErr").textContent = "Type at least one package name"; return; }
+  const bad = names.filter((n) => !PKG_RE.test(n) && !GH_RE.test(n));
+  if (bad.length) { $("pkgErr").textContent = "Not a valid package name: " + bad.join(", "); return; }
+  if (state === "busy") { toast("R is busy. Try again when it's done."); return; }
+  if (state !== "ready") { toast("R isn't connected yet"); connect(false); return; }
+  const cran = names.filter((n) => PKG_RE.test(n));
+  const gh = names.filter((n) => GH_RE.test(n));
+  const lit = (xs) => "c(" + xs.map((x) => JSON.stringify(x)).join(", ") + ")";
+  // Each package's result comes back as a message line we can read: "RPOCKET_PKG <name> <ok|fail>"
+  let code = "local({\n";
+  if (cran.length) code += "  install.packages(" + lit(cran) + ")\n";
+  if (gh.length) {
+    code += '  if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")\n';
+    code += "  for (r in " + lit(gh) + ") remotes::install_github(r, upgrade = \"never\")\n";
+  }
+  const check = cran.concat(gh.map((g) => g.split("@")[0].split("/")[1]));
+  code += "  for (p in " + lit(check) + ") message(\"RPOCKET_PKG \", p, if (requireNamespace(p, quietly = TRUE)) \" ok\" else \" fail\")\n})";
+  $("pkgName").value = "";
+  const log = $("pkgLog");
+  const rows = {};
+  for (const p of check) {
+    const row = document.createElement("div");
+    row.className = "pkgrow";
+    row.innerHTML = '<span class="name">' + escapeHtml(p) + '</span><span class="wait">Installing…</span>';
+    log.prepend(row);
+    rows[p] = row;
+  }
+  const res = await run(code, { stay: true, label: "Installing…" });
+  const results = {};
+  if (res) for (const it of res.items) {
+    if (it.t !== "message") continue;
+    for (const line of it.x.split("\n")) {
+      const mm = line.match(/^RPOCKET_PKG (\S+) (ok|fail)$/);
+      if (mm) results[mm[1]] = mm[2];
+    }
+  }
+  for (const p of check) {
+    const st = rows[p].querySelector("span:last-child");
+    if (results[p] === "ok") { st.className = "ok"; st.textContent = "\u2713 Installed"; }
+    else { st.className = "bad"; st.textContent = res ? "\u2717 Failed, see Console" : "\u2717 Not run"; }
+  }
+  const okCount = check.filter((p) => results[p] === "ok").length;
+  toast(okCount === check.length ? "Installed " + check.join(", ") : okCount + " of " + check.length + " installed");
+}
 
 // ---- Console ----
 function addLine(cls, text) {
@@ -892,7 +1028,7 @@ function buildSymbols() {
     bar.appendChild(b);
   }
 }
-function saveEditor() { store.set("rp.code", editor.value); }
+function saveEditor() { store.set("rp.code", editor.value); renderHighlight(); }
 
 // Run buttons keep the editor's focus and cursor, so the keyboard doesn't jump around
 document.querySelectorAll("#runbar button, #saveBtn").forEach((b) => b.addEventListener("pointerdown", (e) => e.preventDefault()));
@@ -972,6 +1108,7 @@ buildSymbols();
 editor.value = store.get("rp.code", "# Welcome to R Pocket\nx <- rnorm(100)\nsummary(x)\nhist(x)\n");
 updateScriptBar();
 renderGutter();
+renderHighlight();
 document.addEventListener("visibilitychange", () => { if (!document.hidden && state === "down") connect(false); });
 connect(false);
 </script>
