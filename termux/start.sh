@@ -1,17 +1,35 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Starts (or restarts) the R Pocket listener. Called by the app.
-# Usage: start.sh <token> [port]
+# Usage: start.sh <token> [port] [start|restart|stop]
+#   start   - start R only if it isn't already running (keeps a busy R running)
+#   restart - stop any running R, then start a fresh one (default, for older app versions)
+#   stop    - stop R and release the wake lock
 #
 # Uses R inside proot-distro Ubuntu when it's installed (prebuilt packages, Stan),
 # otherwise Termux's own R. To force one, put "ubuntu" or "termux" in ~/.rpocket/engine.
 TOKEN="$1"
 PORT="${2:-8790}"
+MODE="${3:-restart}"
 DIR="$HOME/.rpocket"
 UBUNTU_ROOT="$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu"
+
+if [ "$MODE" = "stop" ]; then
+  pkill -f "rpocket/rserver.R" 2>/dev/null
+  termux-wake-unlock 2>/dev/null
+  exit 0
+fi
+
+if [ "$MODE" = "start" ] && pgrep -f "rpocket/rserver.R" > /dev/null 2>&1; then
+  # Already running, maybe busy with a long job: leave it alone
+  exit 0
+fi
 
 # Stop any running listener (Termux or Ubuntu)
 pkill -f "rpocket/rserver.R" 2>/dev/null
 sleep 0.5
+
+# Keep Termux in the foreground with a wake lock, so Android doesn't stop R while you use other apps
+termux-wake-lock 2>/dev/null
 
 # Work in shared storage when it's set up, so your phone's files are visible
 if [ -d "$HOME/storage/shared" ]; then

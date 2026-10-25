@@ -121,13 +121,14 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public String startR() {
+        public String startR(String mode) {
             Intent i = new Intent();
             i.setClassName(TERMUX, "com.termux.app.RunCommandService");
             i.setAction("com.termux.RUN_COMMAND");
             i.putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash");
             i.putExtra("com.termux.RUN_COMMAND_ARGUMENTS",
-                    new String[]{TERMUX_HOME + "/.rpocket/start.sh", token, String.valueOf(PORT)});
+                    new String[]{TERMUX_HOME + "/.rpocket/start.sh", token, String.valueOf(PORT),
+                            mode == null ? "restart" : mode});
             i.putExtra("com.termux.RUN_COMMAND_WORKDIR", TERMUX_HOME);
             i.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true);
             try {

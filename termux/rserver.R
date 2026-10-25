@@ -23,6 +23,8 @@ dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
 .rp <- new.env()
 .rp$seq <- 0L
 .rp$drawn <- FALSE
+.rp$last_id <- ""
+.rp$last_json <- ""
 
 # Pick the best PNG device available in this R build
 .rp$open_device <- NULL
@@ -288,9 +290,19 @@ handle <- function(con) {
       ",\"lintr\":", json_bool(requireNamespace("lintr", quietly = TRUE)), "}"))
   } else if (path == "/eval" && req$method == "POST") {
     res <- run_code(req$body)
-    respond(con, "200 OK", paste0(
+    out <- paste0(
       "{\"items\":[", paste(res$items, collapse = ","), "],",
-      "\"plots\":[", paste(vapply(res$plots, json_str, ""), collapse = ","), "]}"))
+      "\"plots\":[", paste(vapply(res$plots, json_str, ""), collapse = ","), "]}")
+    # Keep the reply, so the app can fetch it if it was closed or reloaded during the run
+    .rp$last_id <- if (is.null(query$id)) "" else query$id
+    .rp$last_json <- out
+    respond(con, "200 OK", out)
+  } else if (path == "/result") {
+    if (!is.null(query$id) && nzchar(query$id) && identical(query$id, .rp$last_id)) {
+      respond(con, "200 OK", .rp$last_json)
+    } else {
+      respond(con, "404 Not Found", "{\"error\":\"no stored result\"}")
+    }
   } else if (grepl("^/plot/p[0-9]+_[0-9]+\\.png$", path)) {
     f <- file.path(plot_dir, basename(path))
     if (file.exists(f)) {

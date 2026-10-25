@@ -264,13 +264,40 @@ function setStatus(s, label) {
 }
 function readyLabel() { return "R " + rVersion; }
 
-async function ping() {
-  const r = await rreq("GET", "/ping", "", { timeout: 3000 });
+// Returns the ping reply, or null. lastPingBusy tells a busy R (it accepted the connection but didn't
+// answer in time) apart from no R at all (connection refused).
+let lastPingBusy = false;
+async function ping(timeout) {
+  const r = await rreq("GET", "/ping", "", { timeout: timeout === undefined ? 3000 : timeout });
+  lastPingBusy = false;
   if (r.status === 200) {
     const j = parseJson(r.body);
     if (j) { rVersion = j.r; hasLintr = !!j.lintr; return j; }
   }
+  if (r.status === 0 && /Timeout/i.test(r.body)) lastPingBusy = true;
   return null;
+}
+
+// R is still running something (often a run started before the app was closed or reloaded).
+// Wait for it instead of restarting R, then show the output of that run if R kept it.
+async function waitForBusyR() {
+  setStatus("busy", "R is busy…");
+  addLine("hint", "R is still running your last code. Its output will appear here when it finishes.");
+  const j = await ping(0);
+  if (!j) { store.set("rp.pending", null); return connect(false); }
+  ready(j);
+  await recoverPending();
+}
+async function recoverPending() {
+  const id = store.get("rp.pending", null);
+  if (!id) return;
+  store.set("rp.pending", null);
+  const r = await rreq("GET", "/result?" + qs({ id }), "", { timeout: 15000 });
+  const res = r.status === 200 ? parseJson(r.body) : null;
+  if (res) {
+    addLine("hint", "Output from the run that finished while the app was in the background:");
+    await renderResult(res, {});
+  }
 }
 
 async function connect(forceRestart) {
@@ -280,10 +307,12 @@ async function connect(forceRestart) {
   if (!forceRestart) {
     setStatus("checking", "Checking…");
     const j = await ping();
-    if (j) { ready(j); return; }
+    if (j) { ready(j); await recoverPending(); return; }
+    if (lastPingBusy) { await waitForBusyR(); return; }
+    store.set("rp.pending", null);
   }
   setStatus("starting", "Starting R…");
-  const err = bridge.startR();
+  const err = bridge.startR(forceRestart ? "restart" : "start");
   if (err) { setStatus("down", "Couldn't start R"); showSetup("notrunning", err); return; }
   for (let i = 0; i < 40; i++) {
     await new Promise((r) => setTimeout(r, 1000));
@@ -349,18 +378,27 @@ async function run(code, opts) {
   opts = opts || {};
   if (!code.trim()) return null;
   if (state === "busy") { toast("R is still running the last command"); return null; }
-  if (state !== "ready") { toast("R isn't connected yet"); connect(false); return null; }
+  if (state !== "ready") { toast("Starting R. Run again when the badge turns green."); connect(false); return null; }
   setStatus("busy", opts.label || "Running…");
   if (!opts.stay) showTab("console");
-  const r = await rreq("POST", "/eval", code, { timeout: 0 });
+  const runId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  store.set("rp.pending", runId);
+  const r = await rreq("POST", "/eval?" + qs({ id: runId }), code, { timeout: 0 });
+  store.set("rp.pending", null);
   if (r.status !== 200) {
-    addLine("err", "Lost connection to R. " + (r.status ? "" : r.body));
+    addLine("err", "Lost connection to R. It may have been stopped by Android while in the background. " +
+      "Tap the status badge to start it again." + (r.status ? "" : " (" + r.body + ")"));
     setStatus("down", "R not running");
     return null;
   }
   const res = parseJson(r.body);
   setStatus("ready", readyLabel());
   if (!res) { addLine("err", "Unreadable reply from R"); return null; }
+  await renderResult(res, opts);
+  return res;
+}
+
+async function renderResult(res, opts) {
   for (const it of res.items) {
     if (it.t === "input") addLine("in", it.x.split("\n").map((l, i) => (i ? "+ " : "> ") + l).join("\n"));
     else if (it.t === "output") addLine("out", it.x);
@@ -382,7 +420,6 @@ async function run(code, opts) {
     if (!opts.stay) showTab("plots");
   }
   scheduleCheck(0);
-  return res;
 }
 
 function runAll() { run(editor.value); }
@@ -443,6 +480,15 @@ function continues(code) {
   if (q || depth > 0) return true;
   const last = code.replace(/#[^\n]*$/, "").trimEnd();
   return /(\+|-|\*|\/|\^|,|\||&|=|<-|~|%[^%\s]*%|\|>)$/.test(last);
+}
+
+function stopR() {
+  if (!confirm("Stop R? This clears your workspace. R starts again the next time you run code.")) return;
+  const err = bridge ? bridge.startR("stop") : "No Android bridge";
+  if (err) { toast("Couldn't stop R: " + err); return; }
+  store.set("rp.pending", null);
+  setStatus("down", "R stopped");
+  addLine("hint", "R stopped. Tap the status badge or run code to start it again.");
 }
 
 async function restartR() {
@@ -1087,6 +1133,7 @@ function openMenu() {
     '<div class="item"><button class="main" onclick="closeSheet();copyText($(\'consoleOut\').innerText)">Copy console output</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();plots=[];plotIndex=-1;renderPlots()">Clear plots</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();restartR()">Restart R</button></div>' +
+    '<div class="item"><button class="main" onclick="closeSheet();stopR()">Stop R<span class="sub">Stops R and lets the phone sleep normally</span></button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();showSetup(\'notrunning\')">Setup help</button></div>' +
     '<div class="item"><button class="main" onclick="closeSheet();RBridge.openTermux()">Open Termux</button></div>');
 }
