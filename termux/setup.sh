@@ -12,7 +12,8 @@ yes | pkg upgrade -y
 echo "==> Installing R (this can take a few minutes)"
 pkg install -y tur-repo
 yes | pkg upgrade -y
-pkg install -y r-base libicu which build-essential
+# gcc-15 is the compiler this R was built with; install.packages() needs it for C/C++/Fortran code
+pkg install -y r-base libicu which gcc-15 build-essential pkg-config
 
 if ! R --version > /dev/null 2>&1; then
   echo ""
@@ -20,6 +21,11 @@ if ! R --version > /dev/null 2>&1; then
   echo "Fix: run 'termux-change-repo', pick a different mirror, then run this setup again."
   R --version 2>&1 | head -2
   exit 1
+fi
+
+echo "==> Adding a header some R packages (such as cli) need on Termux"
+if [ ! -f "$PREFIX/include/bthread.h" ]; then
+  curl -fsSL "$BASE/bthread.h" -o "$PREFIX/include/bthread.h"
 fi
 
 echo "==> Installing the R Pocket listener"
@@ -40,13 +46,18 @@ fi
 termux-reload-settings || true
 
 echo "==> Checking plot support"
-if Rscript -e 'quit(status = !(isTRUE(capabilities("cairo")) || isTRUE(capabilities("png"))))'; then
+if Rscript -e 'quit(status = !(isTRUE(capabilities("cairo")) || isTRUE(capabilities("png")) || requireNamespace("ragg", quietly = TRUE)))'; then
   echo "    Plots: ready"
 else
-  echo "    Plots: installing the ragg graphics package"
+  echo "    Plots: installing the ragg graphics package (15-30 minutes; keep Termux open)"
   set +e
-  pkg install -y freetype libpng libjpeg-turbo libtiff harfbuzz fribidi fontconfig
+  pkg install -y freetype libpng libjpeg-turbo libtiff libwebp harfbuzz fribidi fontconfig
   Rscript -e 'install.packages("ragg", repos = "https://cloud.r-project.org")'
+  if Rscript -e 'quit(status = !requireNamespace("ragg", quietly = TRUE))'; then
+    echo "    Plots: ready"
+  else
+    echo "    Plots: ragg didn't install, so plots won't show in the app yet."
+  fi
   set -e
 fi
 
