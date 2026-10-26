@@ -1,6 +1,11 @@
 # R Pocket listener: a tiny HTTP server in base R.
 # Runs inside Termux and executes code sent by the R Pocket app.
 # Usage: Rscript rserver.R <port> <token>
+#
+# Everything runs inside local(), so the listener's own objects stay out of your workspace:
+# ls() shows only your objects, and rm(list = ls()) can't break the app.
+
+local({
 
 args <- commandArgs(trailingOnly = TRUE)
 port <- as.integer(if (length(args) >= 1) args[1] else 8790)
@@ -13,6 +18,8 @@ for (.p in c("utils", "stats")) {
   try(suppressPackageStartupMessages(library(.p, character.only = TRUE)))
 }
 rm(.p)
+
+try(utils::rc.settings(ipck = TRUE), silent = TRUE)
 
 options(width = 60, warn = 1,
         repos = c(CRAN = "https://cloud.r-project.org"),
@@ -120,6 +127,52 @@ lint_code <- function(code) {
     ",\"type\":", json_str(l$type), ",\"msg\":", json_str(l$message),
     ",\"linter\":", json_str(if (is.null(l$linter)) "" else l$linter), "}"), "")
   paste0("{\"installed\":true,\"lints\":[", paste(items, collapse = ","), "]}")
+}
+
+R_KEYWORDS <- c("if", "else", "for", "while", "repeat", "function", "return", "next", "break",
+                "TRUE", "FALSE", "NULL", "NA", "Inf", "NaN")
+
+# Code completion using R's own completion engine (the one behind Tab in the R console).
+# `line` is the code before the cursor. Returns the token being completed and suggestions.
+complete_code <- function(line) {
+  line <- gsub("[\r\n]+", " ", line)
+  if (nchar(line) > 2000) line <- substring(line, nchar(line) - 1999)
+  # Never evaluate calls just to complete `x$`: foo()$ would run foo() on every keystroke
+  if (grepl("\\([^()]*\\)\\s*[$@][A-Za-z0-9._]*$", line)) return("{\"token\":\"\",\"items\":[]}")
+  res <- tryCatch({
+    utils:::.assignLinebuffer(line)
+    utils:::.assignEnd(nchar(line))
+    tok <- utils:::.guessTokenFromLine()
+    utils:::.completeToken()
+    list(token = tok, comps = utils:::.retrieveCompletions())
+  }, error = function(e) NULL)
+  if (is.null(res) || !length(res$comps)) return("{\"token\":\"\",\"items\":[]}")
+  comps <- unique(res$comps[nzchar(res$comps)])
+  in_string <- {
+    q <- gsub("\\\\.", "", line)
+    (lengths(regmatches(q, gregexpr("\"", q))) %% 2 == 1) || (lengths(regmatches(q, gregexpr("'", q))) %% 2 == 1)
+  }
+  kind <- vapply(comps, function(x) {
+    if (in_string) return("file")
+    if (grepl("=$", x)) return("arg")
+    if (grepl("[$@]", x)) return("var")
+    if (trimws(x) %in% R_KEYWORDS) return("kw")
+    obj <- tryCatch({
+      if (grepl(":::?", x)) {
+        parts <- strsplit(x, ":::?")[[1]]
+        getExportedValue(parts[1], parts[2])
+      } else get0(x, envir = globalenv())
+    }, error = function(e) NULL)
+    if (is.function(obj)) "fn" else if (!is.null(obj)) "var" else "other"
+  }, "")
+  is_global <- comps %in% ls(globalenv())
+  group <- ifelse(kind == "arg", 0L, ifelse(is_global, 1L, 2L))
+  o <- order(group, nchar(comps), comps)
+  comps <- comps[o]; kind <- kind[o]
+  keep <- seq_len(min(length(comps), 30L))
+  items <- vapply(keep, function(i) paste0(
+    "{\"t\":", json_str(sub("=$", "", comps[i])), ",\"k\":", json_str(kind[i]), "}"), "")
+  paste0("{\"token\":", json_str(res$token), ",\"items\":[", paste(items, collapse = ","), "]}")
 }
 
 list_dir <- function(rel) {
@@ -314,6 +367,8 @@ handle <- function(con) {
     out <- list_dir(query$dir)
     if (is.null(out)) respond(con, "404 Not Found", "{\"error\":\"no such folder\"}")
     else respond(con, "200 OK", out)
+  } else if (path == "/complete" && req$method == "POST") {
+    respond(con, "200 OK", complete_code(req$body))
   } else if (path == "/check" && req$method == "POST") {
     respond(con, "200 OK", check_code(req$body))
   } else if (path == "/lint" && req$method == "POST") {
@@ -345,6 +400,11 @@ handle <- function(con) {
   }
 }
 
+# Test hook: with options(rpocket.test = TRUE), expose the functions instead of serving
+if (isTRUE(getOption("rpocket.test"))) {
+  assign(".rpocket_test", environment(), envir = globalenv())
+} else {
+
 srv <- serverSocket(port)
 cat("R Pocket listener on port", port, "\n")
 repeat {
@@ -357,3 +417,6 @@ repeat {
   })
   try(close(con), silent = TRUE)
 }
+
+}
+})

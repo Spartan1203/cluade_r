@@ -46,15 +46,15 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 #scriptName { border: 0; min-height: 34px; padding: 4px 6px; flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 #scriptName b { color: var(--text); font-weight: 600; }
 #saveBtn { min-height: 32px; padding: 4px 12px; font-size: 13px; }
-#edwrap { flex: 1 1 38%; min-height: 100px; display: flex; background: var(--bg2); border-bottom: 0.5px solid var(--border); overflow: hidden; }
-#gutter { flex: none; min-width: 36px; padding: 10px 6px 30px 6px; font: 12px/var(--lh) var(--mono); color: var(--faint);
+#edwrap { position: relative; flex: 1 1 38%; min-height: 100px; display: flex; background: var(--bg2); border-bottom: 0.5px solid var(--border); overflow: hidden; }
+#gutter { flex: none; min-width: 36px; padding: 10px 6px 56px 6px; font: 12px/var(--lh) var(--mono); color: var(--faint);
   text-align: right; overflow: hidden; user-select: none; border-right: 0.5px solid var(--border); }
 #gutter div { height: var(--lh); padding: 0 2px; border-radius: 4px; }
 #gutter div.cur { color: var(--text); background: var(--curline); }
 #gutter div.lint { color: var(--warn); background: var(--warn-bg); }
 #gutter div.bad { color: var(--err); background: var(--err-bg); font-weight: 600; }
 .edbox { position: relative; flex: 1; min-width: 0; }
-#hl, #editor { position: absolute; inset: 0; margin: 0; font: 14px/var(--lh) var(--mono); padding: 10px 12px 30px 8px;
+#hl, #editor { position: absolute; inset: 0; margin: 0; font: 14px/var(--lh) var(--mono); padding: 10px 12px 56px 8px;
   tab-size: 2; white-space: pre; letter-spacing: 0; }
 #hl { overflow: hidden; pointer-events: none; color: var(--text); }
 #editor { width: 100%; height: 100%; color: transparent; caret-color: var(--text); -webkit-text-fill-color: transparent; }
@@ -117,6 +117,17 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 .lintrow .t-warning { color: var(--warn); }
 .lintrow .t-style { color: var(--accent); }
 .lintrow .linter { display: block; color: var(--faint); font-size: 12px; font-family: var(--mono); }
+#suggest { display: none; gap: 6px; padding: 5px 6px; overflow-x: auto; scrollbar-width: none; background: var(--bg);
+  border-top: 0.5px solid var(--border2); }
+#suggest::-webkit-scrollbar { display: none; }
+#suggest.on { display: flex; }
+#suggest.in-editor { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; }
+#suggest button { flex: none; min-height: 32px; padding: 3px 10px; font: 13px var(--mono); border-radius: 6px; background: var(--bg2); border: 0.5px solid var(--border); }
+#suggest button.k-fn { color: var(--hl-fn); }
+#suggest button.k-arg { color: var(--hl-arg); }
+#suggest button.k-file { color: var(--hl-str); }
+#suggest button.k-kw { color: var(--hl-kw); }
+#suggest button.k-other { color: var(--muted); }
 .pkgform { display: flex; gap: 8px; padding: 10px; border-bottom: 0.5px solid var(--border); }
 .pkgform input { flex: 1; min-width: 0; font: 14px var(--mono); color: var(--text); background: var(--bg2); border: 0.5px solid var(--border2); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
 .pkgrow { display: flex; gap: 10px; align-items: baseline; padding: 9px 14px; border-bottom: 0.5px solid var(--border); font-size: 13px; }
@@ -161,6 +172,7 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 
 <div id="edwrap">
   <div id="gutter" aria-hidden="true"></div>
+  <div id="suggest" class="in-editor" role="listbox" aria-label="Suggestions"></div>
   <div class="edbox">
   <pre id="hl" aria-hidden="true"></pre>
   <textarea id="editor" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
@@ -216,6 +228,7 @@ header h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--accent); 
 "use strict";
 const $ = (id) => document.getElementById(id);
 const editor = $("editor");
+const cmd = $("cmd");
 const gutter = $("gutter");
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -643,6 +656,121 @@ function syncScroll() {
   gutter.scrollTop = editor.scrollTop;
 }
 
+// ---- Autocomplete ----
+const suggest = $("suggest");
+const sug = { ta: null, token: "", pos: -1, seq: 0, timer: null, applying: false, skipNext: false };
+function stripStrings(line) { return line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""'); }
+function inString(line) {
+  let q = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) { if (ch === "\\") i++; else if (ch === q) q = null; }
+    else if (ch === '"' || ch === "'") q = ch;
+    else if (ch === "#") return false;
+  }
+  return q !== null;
+}
+function stripComment(line) { const t = stripStrings(line); const i = t.indexOf("#"); return i < 0 ? line : line.slice(0, i); }
+function requestComplete(ta) {
+  clearTimeout(sug.timer);
+  if (sug.skipNext) { sug.skipNext = false; hideSuggest(); return; }
+  sug.timer = setTimeout(() => doComplete(ta), 120);
+}
+async function doComplete(ta) {
+  if (state !== "ready" || document.activeElement !== ta || ta.selectionStart !== ta.selectionEnd) { hideSuggest(); return; }
+  const pos = ta.selectionStart;
+  const before = ta.value.slice(0, pos);
+  const line = before.slice(before.lastIndexOf("\n") + 1);
+  if (stripStrings(line).indexOf("#") >= 0) { hideSuggest(); return; }
+  const word = (line.match(/[A-Za-z0-9._]*$/) || [""])[0];
+  const prev = line.slice(0, line.length - word.length);
+  const afterAccessor = /(\$|@|::)$/.test(prev);
+  const afterOpen = word === "" && /[(,]\s*$/.test(line);
+  const typedWord = word.length >= 2 && !/^[0-9]/.test(word);
+  // Inside a string, R completes file names: after a call's opening quote, or once you've typed a letter
+  const trigger = inString(line) ? (word.length >= 1 || /\(\s*["']$/.test(line)) : (typedWord || afterAccessor || afterOpen);
+  if (!trigger) { hideSuggest(); return; }
+  // Context: this line plus earlier lines (comments removed), so arguments of multi-line calls still complete
+  const lines = before.slice(-1500).split("\n");
+  const ctx = lines.map((l, i) => (i < lines.length - 1 ? stripComment(l) : l)).join(" ");
+  const seq = ++sug.seq;
+  const r = await rreq("POST", "/complete", ctx, { timeout: 2000 });
+  if (seq !== sug.seq || ta.selectionStart !== pos || ta.value.slice(0, pos) !== before) return;
+  const j = r.status === 200 ? parseJson(r.body) : null;
+  if (!j || !j.items.length) { hideSuggest(); return; }
+  // Hide a lone suggestion that's exactly what's already typed
+  if (j.items.length === 1 && j.items[0].t === j.token) { hideSuggest(); return; }
+  if (before.slice(pos - j.token.length) !== j.token) { hideSuggest(); return; }
+  sug.ta = ta; sug.token = j.token; sug.pos = pos;
+  suggest.innerHTML = "";
+  for (const it of j.items) {
+    const b = document.createElement("button");
+    b.className = "k-" + it.k;
+    b.textContent = it.k === "fn" ? it.t + "()" : it.k === "arg" ? it.t + " =" : it.t;
+    b.addEventListener("pointerdown", (e) => e.preventDefault());
+    b.addEventListener("click", () => applySuggestion(it));
+    suggest.appendChild(b);
+  }
+  placeSuggest(ta);
+  suggest.scrollLeft = 0;
+  suggest.classList.add("on");
+  if (ta === editor) keepCaretAboveStrip();
+}
+function placeSuggest(ta) {
+  if (ta === editor) {
+    if (suggest.parentNode !== $("edwrap")) $("edwrap").prepend(suggest);
+    suggest.className = "in-editor";
+  } else {
+    if (suggest.nextSibling !== $("consoleIn")) $("console").insertBefore(suggest, $("consoleIn"));
+    suggest.className = "";
+  }
+}
+function keepCaretAboveStrip() {
+  const ln = lineOf(editor.selectionStart);
+  const bottom = 10 + ln * LH - editor.scrollTop;
+  const room = editor.clientHeight - suggest.offsetHeight - 4;
+  if (bottom > room) { editor.scrollTop += bottom - room; syncScroll(); }
+}
+function hideSuggest() {
+  suggest.classList.remove("on");
+  sug.pos = -1;
+}
+function applySuggestion(it) {
+  const ta = sug.ta;
+  if (!ta) return;
+  const pos = ta.selectionStart;
+  const start = pos - sug.token.length;
+  if (start < 0 || ta.value.slice(start, pos) !== sug.token) { hideSuggest(); return; }
+  let text = it.t, back = 0;
+  if (it.k === "arg") text = it.t + " = ";
+  else if (it.k === "fn" && ta.value[pos] !== "(") { text = it.t + "()"; back = 1; }
+  // Ending the keyboard's composition first stops some keyboards from re-inserting the typed word
+  sug.applying = true;
+  ta.blur();
+  ta.value = ta.value.slice(0, start) + text + ta.value.slice(pos);
+  const caret = start + text.length - back;
+  ta.focus();
+  ta.setSelectionRange(caret, caret);
+  sug.applying = false;
+  hideSuggest();
+  // Keep suggesting after pkg::, x$ or an opened call (shows its arguments); otherwise stop
+  const chain = /(::|\$|@)$/.test(text) || back === 1;
+  if (!chain) sug.skipNext = true;
+  ta.dispatchEvent(new Event("input"));
+  if (chain) { sug.skipNext = false; requestComplete(ta); }
+}
+for (const ta of [editor, cmd]) {
+  ta.addEventListener("input", () => requestComplete(ta));
+  ta.addEventListener("blur", () => {
+    if (sug.applying) return;
+    // Only hide suggestions that belong to the box that lost focus
+    setTimeout(() => { if (document.activeElement !== ta && sug.ta === ta) hideSuggest(); }, 150);
+  });
+}
+document.addEventListener("selectionchange", () => {
+  if (sug.pos >= 0 && sug.ta && sug.ta.selectionStart !== sug.pos) hideSuggest();
+});
+
 // ---- Packages ----
 const PKG_RE = /^[A-Za-z][A-Za-z0-9.]*[A-Za-z0-9]$/;
 const GH_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(@[A-Za-z0-9_.\/-]+)?$/;
@@ -706,7 +834,6 @@ function addLine(cls, text) {
 }
 
 // ---- Console input ----
-const cmd = $("cmd");
 let cmdHistory = store.get("rp.history", []);
 let histPos = cmdHistory.length;
 let histDraft = "";
@@ -726,6 +853,7 @@ function runCommand() {
   }
   histPos = cmdHistory.length;
   histDraft = "";
+  hideSuggest();
   cmd.value = "";
   sizeCmd();
   run(code);
